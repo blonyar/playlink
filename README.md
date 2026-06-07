@@ -45,7 +45,7 @@ admin/       health, room list, debug console, logs, metrics
 Start the server:
 
 ```bash
-cargo run
+rustup run stable cargo run
 ```
 
 Health check:
@@ -103,6 +103,23 @@ Broadcast to the room:
   }
 }
 ```
+
+## Smoke Test
+
+In one terminal, start the server:
+
+```bash
+rustup run stable cargo run
+```
+
+In another terminal, run the JavaScript WebSocket smoke test:
+
+```bash
+cd examples/js-client
+npm run smoke
+```
+
+The smoke test creates a room, joins two clients, exchanges room messages, checks `/api/rooms`, closes one client, and verifies disconnect cleanup.
 
 ## Roadmap
 
