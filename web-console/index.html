@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playlink Console</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Playlink</p>
+          <h1>Web Debug Console</h1>
+          <p class="subtle">Inspect rooms and manually exercise the WebSocket room flow.</p>
+        </div>
+        <button id="refresh-button" type="button">Refresh</button>
+      </header>
+
+      <section class="grid overview" aria-labelledby="overview-title">
+        <h2 id="overview-title">Overview</h2>
+        <article class="metric">
+          <span>Health</span>
+          <strong id="health-status">unknown</strong>
+        </article>
+        <article class="metric">
+          <span>Version</span>
+          <strong id="server-version">unknown</strong>
+        </article>
+        <article class="metric">
+          <span>Rooms</span>
+          <strong id="room-count">0</strong>
+        </article>
+        <article class="metric">
+          <span>Players</span>
+          <strong id="player-count">0</strong>
+        </article>
+        <article class="metric">
+          <span>WebSocket</span>
+          <strong id="ws-state">disconnected</strong>
+        </article>
+      </section>
+
+      <section class="panel" aria-labelledby="rooms-title">
+        <div class="panel-heading">
+          <h2 id="rooms-title">Rooms</h2>
+          <button id="rooms-refresh-button" type="button">Refresh Rooms</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Players</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rooms-body">
+              <tr><td colspan="4">No rooms loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="client-title">
+        <h2 id="client-title">Test Client</h2>
+        <div class="form-grid">
+          <label>
+            WebSocket URL
+            <input id="ws-url" autocomplete="off" />
+          </label>
+          <div class="button-row align-end">
+            <button id="connect-button" type="button">Connect</button>
+            <button id="disconnect-button" type="button" disabled>Disconnect</button>
+          </div>
+          <label>
+            Room name
+            <input id="room-name" value="debug-room" />
+          </label>
+          <label>
+            Max players
+            <input id="max-players" type="number" min="1" value="4" />
+          </label>
+          <button id="create-room-button" type="button" disabled>Create Room</button>
+          <label>
+            Room ID
+            <input id="room-id" autocomplete="off" />
+          </label>
+          <label>
+            Player name
+            <input id="player-name" value="debug-player" />
+          </label>
+          <button id="join-room-button" type="button" disabled>Join Room</button>
+          <label class="span-2">
+            Message payload JSON
+            <textarea id="message-payload" rows="5">{"text":"hello from console"}</textarea>
+          </label>
+          <div class="button-row span-2">
+            <button id="send-message-button" type="button" disabled>Send Room Message</button>
+            <button id="ping-button" type="button" disabled>Ping</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="messages-title">
+        <div class="panel-heading">
+          <h2 id="messages-title">Messages</h2>
+          <button id="clear-log-button" type="button">Clear</button>
+        </div>
+        <pre id="message-log" class="log"></pre>
+      </section>
+    </main>
+
+    <script src="/assets/app.js" type="module"></script>
+  </body>
+</html>

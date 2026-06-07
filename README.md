@@ -104,6 +104,20 @@ Broadcast to the room:
 }
 ```
 
+## Web Debug Console
+
+Start the server and open the console in a browser:
+
+```bash
+rustup run stable cargo run
+```
+
+```text
+http://localhost:7777/
+```
+
+The console shows health, room counts, room snapshots, and a built-in WebSocket test client for creating rooms, joining rooms, sending messages, and inspecting received events.
+
 ## Smoke Test
 
 In one terminal, start the server:
