@@ -11,73 +11,89 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Playlink</p>
-          <h1>Web Debug Console</h1>
-          <p class="subtle">Monitor the server, inspect rooms, and simulate a game client.</p>
+          <h1 data-i18n="appTitle">Web Debug Console</h1>
+          <p class="subtle" data-i18n="appSubtitle">Monitor the server, inspect rooms, and simulate a game client.</p>
         </div>
-        <button id="refresh-button" type="button">Refresh Data</button>
+        <div class="hero-actions">
+          <label class="language-picker">
+            <span data-i18n="language">Language</span>
+            <select id="language-select">
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+          </label>
+          <button id="refresh-button" type="button" data-i18n="refreshData">Refresh Data</button>
+        </div>
       </header>
 
       <nav class="tabs" aria-label="Console sections">
-        <button class="tab active" type="button" data-tab="overview">Overview</button>
-        <button class="tab" type="button" data-tab="rooms">Rooms</button>
-        <button class="tab" type="button" data-tab="simulator">Simulator</button>
-        <button class="tab" type="button" data-tab="messages">Messages</button>
+        <button class="tab active" type="button" data-tab="overview" data-i18n="tabOverview">Overview</button>
+        <button class="tab" type="button" data-tab="rooms" data-i18n="tabRooms">Rooms</button>
+        <button class="tab" type="button" data-tab="simulator" data-i18n="tabSimulator">Simulator</button>
+        <button class="tab" type="button" data-tab="messages" data-i18n="tabMessages">Messages</button>
       </nav>
 
       <section class="tab-panel active" data-panel="overview" aria-labelledby="overview-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Monitor</p>
-            <h2 id="overview-title">Server Overview</h2>
+            <p class="eyebrow" data-i18n="monitor">Monitor</p>
+            <h2 id="overview-title" data-i18n="serverOverview">Server Overview</h2>
           </div>
-          <p class="subtle">Read-only status for the running Playlink process.</p>
+          <p class="subtle" data-i18n="overviewHelp">Read-only status for the running Playlink process.</p>
         </div>
 
         <div class="grid overview-grid">
           <article class="metric">
-            <span>Health</span>
+            <span data-i18n="health">Health</span>
             <strong id="health-status">unknown</strong>
           </article>
           <article class="metric">
-            <span>Version</span>
+            <span data-i18n="version">Version</span>
             <strong id="server-version">unknown</strong>
           </article>
           <article class="metric">
-            <span>Rooms</span>
+            <span data-i18n="rooms">Rooms</span>
             <strong id="room-count">0</strong>
           </article>
           <article class="metric">
-            <span>Players</span>
+            <span data-i18n="players">Players</span>
             <strong id="player-count">0</strong>
           </article>
           <article class="metric">
-            <span>WebSocket</span>
+            <span data-i18n="websocket">WebSocket</span>
             <strong id="ws-state">disconnected</strong>
           </article>
         </div>
+
+        <article class="info-card">
+          <h3 data-i18n="disconnectTitle">Why does it disconnect?</h3>
+          <p data-i18n="disconnectBody">The server closes idle WebSocket sessions after 30 seconds. This console sends an automatic ping every 10 seconds while connected, so it should stay connected unless the server stops or the network drops.</p>
+        </article>
       </section>
 
       <section class="tab-panel" data-panel="rooms" aria-labelledby="rooms-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Inspector</p>
-            <h2 id="rooms-title">Rooms</h2>
+            <p class="eyebrow" data-i18n="inspector">Inspector</p>
+            <h2 id="rooms-title" data-i18n="roomInspector">Room Inspector</h2>
           </div>
-          <button id="rooms-refresh-button" type="button">Refresh Rooms</button>
+          <button id="rooms-refresh-button" type="button" data-i18n="refreshRooms">Refresh Rooms</button>
         </div>
+
+        <p class="help-text" data-i18n="roomsHelp">Use this area to inspect server state. Click “Use” to copy a room ID into the Simulator.</p>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Name</th>
-                <th>Players</th>
-                <th>Action</th>
+                <th data-i18n="name">Name</th>
+                <th data-i18n="players">Players</th>
+                <th data-i18n="action">Action</th>
               </tr>
             </thead>
             <tbody id="rooms-body">
-              <tr><td colspan="4">No rooms loaded.</td></tr>
+              <tr><td colspan="4" data-i18n="noRoomsLoaded">No rooms loaded.</td></tr>
             </tbody>
           </table>
         </div>
@@ -86,59 +102,67 @@
       <section class="tab-panel" data-panel="simulator" aria-labelledby="client-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Simulator</p>
-            <h2 id="client-title">Client Simulator</h2>
+            <p class="eyebrow" data-i18n="simulator">Simulator</p>
+            <h2 id="client-title" data-i18n="clientSimulator">Client Simulator</h2>
           </div>
-          <p class="subtle">Pretend to be one game client and manually send protocol messages.</p>
+          <p class="subtle" data-i18n="simulatorHelp">Pretend to be one game client and manually send protocol messages.</p>
         </div>
+
+        <ol class="flow">
+          <li><strong data-i18n="flowConnect">Connect</strong><span data-i18n="flowConnectHelp">Open a WebSocket session.</span></li>
+          <li><strong data-i18n="flowCreate">Create or choose room</strong><span data-i18n="flowCreateHelp">Create a room here, or use one from Rooms.</span></li>
+          <li><strong data-i18n="flowJoin">Join</strong><span data-i18n="flowJoinHelp">Join with a player name.</span></li>
+          <li><strong data-i18n="flowSend">Send message</strong><span data-i18n="flowSendHelp">Broadcast JSON to everyone in the room.</span></li>
+        </ol>
 
         <div class="simulator-layout">
           <article class="card">
-            <h3>Connection</h3>
+            <h3 data-i18n="connection">Connection</h3>
             <label>
-              WebSocket URL
+              <span data-i18n="websocketUrl">WebSocket URL</span>
               <input id="ws-url" autocomplete="off" />
             </label>
+            <p class="help-text"><span data-i18n="keepaliveStatus">Keepalive</span>: <strong id="keepalive-state">off</strong></p>
             <div class="button-row">
-              <button id="connect-button" type="button">Connect</button>
-              <button id="disconnect-button" type="button" disabled>Disconnect</button>
-              <button id="ping-button" type="button" disabled>Ping</button>
+              <button id="connect-button" type="button" data-i18n="connect">Connect</button>
+              <button id="disconnect-button" type="button" disabled data-i18n="disconnect">Disconnect</button>
+              <button id="ping-button" type="button" disabled data-i18n="ping">Ping</button>
             </div>
           </article>
 
           <article class="card">
-            <h3>Create Room</h3>
+            <h3 data-i18n="createRoom">Create Room</h3>
             <label>
-              Room name
+              <span data-i18n="roomName">Room name</span>
               <input id="room-name" value="debug-room" />
             </label>
             <label>
-              Max players
+              <span data-i18n="maxPlayers">Max players</span>
               <input id="max-players" type="number" min="1" value="4" />
             </label>
-            <button id="create-room-button" type="button" disabled>Create Room</button>
+            <button id="create-room-button" type="button" disabled data-i18n="createRoom">Create Room</button>
           </article>
 
           <article class="card">
-            <h3>Join Room</h3>
+            <h3 data-i18n="joinRoom">Join Room</h3>
             <label>
-              Room ID
+              <span data-i18n="roomId">Room ID</span>
               <input id="room-id" autocomplete="off" />
             </label>
             <label>
-              Player name
+              <span data-i18n="playerName">Player name</span>
               <input id="player-name" value="debug-player" />
             </label>
-            <button id="join-room-button" type="button" disabled>Join Room</button>
+            <button id="join-room-button" type="button" disabled data-i18n="joinRoom">Join Room</button>
           </article>
 
           <article class="card wide">
-            <h3>Send Room Message</h3>
+            <h3 data-i18n="sendRoomMessage">Send Room Message</h3>
             <label>
-              Message payload JSON
+              <span data-i18n="messagePayload">Message payload JSON</span>
               <textarea id="message-payload" rows="5">{"text":"hello from console"}</textarea>
             </label>
-            <button id="send-message-button" type="button" disabled>Send Room Message</button>
+            <button id="send-message-button" type="button" disabled data-i18n="sendRoomMessage">Send Room Message</button>
           </article>
         </div>
       </section>
@@ -146,11 +170,12 @@
       <section class="tab-panel" data-panel="messages" aria-labelledby="messages-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Logs</p>
-            <h2 id="messages-title">Messages</h2>
+            <p class="eyebrow" data-i18n="logs">Logs</p>
+            <h2 id="messages-title" data-i18n="messageLog">Message Log</h2>
           </div>
-          <button id="clear-log-button" type="button">Clear</button>
+          <button id="clear-log-button" type="button" data-i18n="clear">Clear</button>
         </div>
+        <p class="help-text" data-i18n="messagesHelp">This log shows connection events, sent protocol messages, received protocol messages, and errors.</p>
         <pre id="message-log" class="log"></pre>
       </section>
     </main>
