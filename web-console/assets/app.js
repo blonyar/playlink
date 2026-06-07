@@ -1,4 +1,6 @@
 const elements = {
+  tabs: document.querySelectorAll('.tab'),
+  panels: document.querySelectorAll('.tab-panel'),
   refreshButton: document.querySelector('#refresh-button'),
   healthStatus: document.querySelector('#health-status'),
   serverVersion: document.querySelector('#server-version'),
@@ -24,6 +26,16 @@ const elements = {
 };
 
 let socket = null;
+
+function activateTab(tabName) {
+  elements.tabs.forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+
+  elements.panels.forEach((panel) => {
+    panel.classList.toggle('active', panel.dataset.panel === tabName);
+  });
+}
 
 function defaultWebSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -90,6 +102,7 @@ async function refreshRooms() {
         button.textContent = 'Use';
         button.addEventListener('click', () => {
           elements.roomId.value = room.id;
+          activateTab('simulator');
         });
 
         action.append(button);
@@ -111,6 +124,7 @@ function connect() {
 
   socket = new WebSocket(elements.wsUrl.value.trim());
   setSocketState('connecting');
+  activateTab('messages');
   log('connecting', elements.wsUrl.value.trim());
 
   socket.addEventListener('open', () => {
@@ -196,6 +210,9 @@ function ping() {
 }
 
 elements.wsUrl.value = defaultWebSocketUrl();
+elements.tabs.forEach((tab) => {
+  tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+});
 elements.refreshButton.addEventListener('click', refreshAll);
 elements.roomsRefreshButton.addEventListener('click', refreshRooms);
 elements.connectButton.addEventListener('click', connect);

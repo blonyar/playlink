@@ -61,10 +61,10 @@ textarea {
 }
 
 .hero,
-.panel,
-.overview {
+.tabs,
+.tab-panel,
+.card {
   border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 1.25rem;
   background: rgba(15, 23, 42, 0.82);
   box-shadow: 0 24px 80px rgba(2, 6, 23, 0.35);
 }
@@ -74,6 +74,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  border-radius: 1.25rem;
   padding: 1.5rem;
 }
 
@@ -91,7 +92,8 @@ textarea {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
 }
 
@@ -101,28 +103,68 @@ h1 {
 }
 
 h2 {
-  font-size: 1.1rem;
+  font-size: 1.35rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 1rem;
+  border-radius: 1rem;
+  padding: 0.5rem;
+}
+
+.tab {
+  background: transparent;
+  color: #cbd5e1;
+}
+
+.tab.active {
+  background: #38bdf8;
+  color: #082f49;
+}
+
+.tab-panel {
+  display: none;
+  margin-top: 1rem;
+  border-radius: 1.25rem;
+  padding: 1rem;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1rem;
 }
 
-.overview {
-  margin-top: 1rem;
-  padding: 1rem;
+.overview-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.overview h2 {
-  grid-column: 1 / -1;
+.metric,
+.card {
+  border-radius: 1rem;
+  padding: 1rem;
 }
 
 .metric {
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 1rem;
-  padding: 1rem;
   background: rgba(2, 6, 23, 0.5);
 }
 
@@ -136,19 +178,6 @@ h2 {
   display: block;
   margin-top: 0.35rem;
   font-size: 1.35rem;
-}
-
-.panel {
-  margin-top: 1rem;
-  padding: 1rem;
-}
-
-.panel-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
 }
 
 .table-wrap {
@@ -173,10 +202,20 @@ th {
   font-size: 0.85rem;
 }
 
-.form-grid {
+.simulator-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.card {
+  display: grid;
+  gap: 1rem;
+  background: rgba(2, 6, 23, 0.5);
+}
+
+.card.wide {
+  grid-column: 1 / -1;
 }
 
 label {
@@ -186,23 +225,15 @@ label {
   font-weight: 700;
 }
 
-.span-2 {
-  grid-column: span 2;
-}
-
 .button-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-.align-end {
-  align-self: end;
-}
-
 .log {
-  min-height: 14rem;
-  max-height: 28rem;
+  min-height: 26rem;
+  max-height: 40rem;
   overflow: auto;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 1rem;
@@ -212,19 +243,16 @@ label {
   white-space: pre-wrap;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .hero,
-  .panel-heading {
+  .section-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .grid,
-  .form-grid {
+  .tabs,
+  .overview-grid,
+  .simulator-layout {
     grid-template-columns: 1fr;
-  }
-
-  .span-2 {
-    grid-column: auto;
   }
 }
