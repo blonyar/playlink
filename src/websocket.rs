@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -6,6 +8,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
+use tokio::time::timeout;
 
 use crate::{
     protocol::{ClientMessage, ServerMessage},
@@ -13,6 +16,8 @@ use crate::{
     session::Session,
     AppState,
 };
+
+const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn connect(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -31,8 +36,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
         }
     });
+    let idle_timeout = session_idle_timeout();
 
-    while let Some(Ok(message)) = receiver.next().await {
+    loop {
+        let Ok(next_message) = timeout(idle_timeout, receiver.next()).await else {
+            break;
+        };
+
+        let Some(Ok(message)) = next_message else {
+            break;
+        };
+
         let Message::Text(text) = message else {
             continue;
         };
@@ -152,4 +166,12 @@ fn send(outgoing_tx: &tokio::sync::mpsc::UnboundedSender<String>, message: &Serv
     if let Ok(text) = serde_json::to_string(message) {
         let _ = outgoing_tx.send(text);
     }
+}
+
+fn session_idle_timeout() -> Duration {
+    std::env::var("PLAYLINK_SESSION_IDLE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(DEFAULT_SESSION_IDLE_TIMEOUT)
 }

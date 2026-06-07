@@ -121,6 +121,19 @@ npm run smoke
 
 The smoke test creates a room, joins two clients, exchanges room messages, checks `/api/rooms`, closes one client, and verifies disconnect cleanup.
 
+To quickly test idle disconnect behavior, start the server with a short timeout:
+
+```bash
+PLAYLINK_SESSION_IDLE_TIMEOUT_SECS=1 rustup run stable cargo run
+```
+
+Then run:
+
+```bash
+cd examples/js-client
+npm run idle-timeout
+```
+
 ## Roadmap
 
 1. v0.1 dedicated WebSocket room server
