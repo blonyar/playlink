@@ -1,7 +1,15 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use serde::Serialize;
+use uuid::Uuid;
 
-use crate::{room::RoomSnapshot, AppState};
+use crate::{
+    room::{RoomDetail, RoomSnapshot},
+    AppState,
+};
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -20,4 +28,15 @@ pub async fn health() -> Json<HealthResponse> {
 
 pub async fn list_rooms(State(state): State<AppState>) -> Json<Vec<RoomSnapshot>> {
     Json(state.rooms.snapshots())
+}
+
+pub async fn get_room(
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+) -> Result<Json<RoomDetail>, StatusCode> {
+    state
+        .rooms
+        .detail(room_id)
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }

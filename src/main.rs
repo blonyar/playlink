@@ -33,6 +33,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(admin::health))
         .route("/api/rooms", get(admin::list_rooms))
+        .route("/api/rooms/:room_id", get(admin::get_room))
         .route("/ws", get(websocket::connect))
         .nest_service(
             "/",

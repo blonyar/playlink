@@ -234,6 +234,12 @@ h3 {
   margin-top: 0.75rem;
 }
 
+.rooms-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1rem;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -256,8 +262,30 @@ th {
   font-size: 0.85rem;
 }
 
+tbody tr {
+  cursor: pointer;
+}
+
 .current-room td {
   background: rgba(56, 189, 248, 0.12);
+}
+
+.selected-room td {
+  outline: 1px solid rgba(56, 189, 248, 0.5);
+  outline-offset: -1px;
+}
+
+.room-detail {
+  align-content: start;
+}
+
+.player-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
 }
 
 .flow {
@@ -370,6 +398,7 @@ label {
   .overview-grid,
   .flow,
   .room-tools,
+  .rooms-layout,
   .simulator-layout,
   .simulator-layout.narrow {
     grid-template-columns: 1fr;

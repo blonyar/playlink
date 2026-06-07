@@ -34,6 +34,14 @@ pub struct RoomSnapshot {
     pub player_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RoomDetail {
+    pub id: Uuid,
+    pub name: String,
+    pub max_players: usize,
+    pub players: Vec<Player>,
+}
+
 impl RoomRegistry {
     pub fn create_room(&self, name: Option<String>, max_players: Option<usize>) -> Uuid {
         let id = Uuid::new_v4();
@@ -111,6 +119,15 @@ impl RoomRegistry {
                 player_count: room.players.len(),
             })
             .collect()
+    }
+
+    pub fn detail(&self, room_id: Uuid) -> Option<RoomDetail> {
+        self.rooms.get(&room_id).map(|room| RoomDetail {
+            id: room.id,
+            name: room.name.clone(),
+            max_players: room.max_players,
+            players: room.players.iter().map(|player| player.clone()).collect(),
+        })
     }
 }
 
