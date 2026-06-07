@@ -7,7 +7,8 @@ const translations = {
     inspector: 'Inspector', roomInspector: 'Room Inspector', refreshRooms: 'Refresh Rooms', roomsHelp: 'Create rooms here, or join an existing room as the connected simulator client.', name: 'Name', action: 'Action', noRoomsLoaded: 'No rooms loaded.', noRooms: 'No rooms.', join: 'Join',
     simulator: 'Simulator', clientSimulator: 'Client Simulator', simulatorHelp: 'This area only controls one simulated client connection and identity.', connection: 'Connection', websocketUrl: 'WebSocket URL', keepaliveStatus: 'Keepalive', connect: 'Connect', disconnect: 'Disconnect', ping: 'Ping', playerName: 'Player name', nextStepTitle: 'Next step', nextStepBody: 'After connecting, go to Rooms to create or join a room. After joining, go to Messages to send room messages.',
     createRoom: 'Create Room', roomName: 'Room name', maxPlayers: 'Max players', sendRoomMessage: 'Send Room Message', messagePayload: 'Message payload JSON', logs: 'Logs', messageLog: 'Message Log', clear: 'Clear', messagesHelp: 'After joining a room, send room messages here and inspect sent/received events.', close: 'Close',
-    off: 'off', onAutoPing: 'on, auto ping every 10s', disconnected: 'disconnected', connecting: 'connecting', connected: 'connected', notConnected: 'Connect the simulator first.', notInRoom: 'Join a room before sending room messages.', joinedRoom: 'Joined room',
+    sessionState: 'Session State', currentPlayer: 'Current player', currentRoom: 'Current room',
+    off: 'off', onAutoPing: 'on, auto ping every 10s', disconnected: 'disconnected', connecting: 'connecting', connected: 'connected', notConnected: 'Connect the simulator first.', notInRoom: 'Join a room before sending room messages.', joinedRoom: 'Joined room', createdRoom: 'Created room',
   },
   zh: {
     appTitle: 'Web 调试控制台', appSubtitle: '监控服务状态、查看房间，并模拟一个游戏客户端。', language: '语言', refreshData: '刷新数据',
@@ -17,13 +18,14 @@ const translations = {
     inspector: '检查器', roomInspector: '房间检查器', refreshRooms: '刷新房间', roomsHelp: '在这里创建房间，或让已连接的模拟客户端加入已有房间。', name: '名称', action: '操作', noRoomsLoaded: '还没有加载房间。', noRooms: '暂无房间。', join: '加入',
     simulator: '模拟器', clientSimulator: '客户端模拟器', simulatorHelp: '这里只负责一个模拟客户端的连接和身份。', connection: '连接', websocketUrl: 'WebSocket 地址', keepaliveStatus: '保活', connect: '连接', disconnect: '断开', ping: 'Ping', playerName: '玩家名', nextStepTitle: '下一步', nextStepBody: '连接后去“房间”创建或加入房间；加入后去“消息”发送房间消息。',
     createRoom: '创建房间', roomName: '房间名', maxPlayers: '最大玩家数', sendRoomMessage: '发送房间消息', messagePayload: '消息 JSON', logs: '日志', messageLog: '消息日志', clear: '清空', messagesHelp: '加入房间后，在这里发送房间消息并查看发送/接收事件。', close: '关闭',
-    off: '关闭', onAutoPing: '开启，每 10 秒自动 ping', disconnected: '未连接', connecting: '连接中', connected: '已连接', notConnected: '请先在模拟器里连接。', notInRoom: '请先加入房间，再发送房间消息。', joinedRoom: '已加入房间',
+    sessionState: '会话状态', currentPlayer: '当前玩家', currentRoom: '当前房间',
+    off: '关闭', onAutoPing: '开启，每 10 秒自动 ping', disconnected: '未连接', connecting: '连接中', connected: '已连接', notConnected: '请先在模拟器里连接。', notInRoom: '请先加入房间，再发送房间消息。', joinedRoom: '已加入房间', createdRoom: '已创建房间',
   },
 };
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
-  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), keepaliveState: document.querySelector('#keepalive-state'),
+  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'),
   roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), sendMessageButton: document.querySelector('#send-message-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
@@ -62,6 +64,12 @@ function log(label, value = '') {
   elements.messageLog.scrollTop = elements.messageLog.scrollHeight;
 }
 
+function renderSessionState() {
+  elements.currentPlayer.textContent = socket ? (elements.playerName.value.trim() || 'debug-player') : '-';
+  elements.currentRoom.textContent = currentRoomId ?? '-';
+  elements.messageCurrentRoom.textContent = currentRoomId ?? '-';
+}
+
 function setSocketState(state) {
   elements.wsState.textContent = t(state);
   const connected = state === 'connected';
@@ -71,6 +79,7 @@ function setSocketState(state) {
   elements.createRoomButton.disabled = !connected;
   elements.sendMessageButton.disabled = !connected || !currentRoomId;
   elements.pingButton.disabled = !connected;
+  renderSessionState();
 }
 
 function startKeepalive() {
@@ -160,10 +169,13 @@ function connect() {
     log('received', message);
     if (message.type === 'room_created') {
       elements.createRoomDialog.close();
+      log(t('createdRoom'), message.payload.room_id);
+      joinRoom(message.payload.room_id);
       refreshRooms();
     }
     if (message.type === 'room_joined') {
       currentRoomId = message.payload.room_id;
+      renderSessionState();
       setSocketState('connected');
       log(t('joinedRoom'), currentRoomId);
       activateTab('messages');
@@ -226,11 +238,13 @@ elements.openCreateRoomButton.addEventListener('click', () => elements.createRoo
 elements.closeCreateRoomButton.addEventListener('click', () => elements.createRoomDialog.close());
 elements.connectButton.addEventListener('click', connect);
 elements.disconnectButton.addEventListener('click', disconnect);
+elements.playerName.addEventListener('input', renderSessionState);
 elements.createRoomButton.addEventListener('click', createRoom);
 elements.sendMessageButton.addEventListener('click', sendRoomMessage);
 elements.pingButton.addEventListener('click', ping);
 elements.clearLogButton.addEventListener('click', () => { elements.messageLog.textContent = ''; });
 
 setSocketState('disconnected');
+renderSessionState();
 applyLanguage();
 refreshAll();
