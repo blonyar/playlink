@@ -31,6 +31,11 @@ button {
   font-weight: 700;
 }
 
+button.secondary {
+  background: #334155;
+  color: #e2e8f0;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -251,10 +256,25 @@ th {
   line-height: 1.45;
 }
 
+.inline-flow {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #cbd5e1;
+  line-height: 1.8;
+}
+
 .simulator-layout {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.simulator-layout.narrow {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.message-composer {
+  margin-bottom: 1rem;
 }
 
 .card {
@@ -292,6 +312,25 @@ label {
   white-space: pre-wrap;
 }
 
+.modal {
+  width: min(520px, calc(100% - 2rem));
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 1.25rem;
+  padding: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.modal::backdrop {
+  background: rgba(2, 6, 23, 0.74);
+}
+
+.modal-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
 @media (max-width: 900px) {
   .hero,
   .hero-actions,
@@ -303,7 +342,8 @@ label {
   .tabs,
   .overview-grid,
   .flow,
-  .simulator-layout {
+  .simulator-layout,
+  .simulator-layout.narrow {
     grid-template-columns: 1fr;
   }
 }
