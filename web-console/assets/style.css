@@ -211,6 +211,29 @@ h3 {
   font-size: 1.35rem;
 }
 
+.room-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.advanced {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 1rem;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.advanced label {
+  margin-top: 0.75rem;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -231,6 +254,10 @@ td {
 th {
   color: #94a3b8;
   font-size: 0.85rem;
+}
+
+.current-room td {
+  background: rgba(56, 189, 248, 0.12);
 }
 
 .flow {
@@ -342,6 +369,7 @@ label {
   .tabs,
   .overview-grid,
   .flow,
+  .room-tools,
   .simulator-layout,
   .simulator-layout.narrow {
     grid-template-columns: 1fr;

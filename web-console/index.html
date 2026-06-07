@@ -93,13 +93,16 @@
           <article class="card">
             <h3 data-i18n="connection">Connection</h3>
             <label>
-              <span data-i18n="websocketUrl">WebSocket URL</span>
-              <input id="ws-url" autocomplete="off" />
-            </label>
-            <label>
               <span data-i18n="playerName">Player name</span>
               <input id="player-name" value="debug-player" />
             </label>
+            <details class="advanced">
+              <summary data-i18n="advancedConnection">Advanced connection</summary>
+              <label>
+                <span data-i18n="websocketUrl">WebSocket URL</span>
+                <input id="ws-url" autocomplete="off" />
+              </label>
+            </details>
             <p class="help-text"><span data-i18n="keepaliveStatus">Keepalive</span>: <strong id="keepalive-state">off</strong></p>
             <div class="button-row">
               <button id="connect-button" type="button" data-i18n="connect">Connect</button>
@@ -130,6 +133,21 @@
         </div>
 
         <p class="help-text" data-i18n="roomsHelp">Create rooms here, or join an existing room as the connected simulator client.</p>
+
+        <div class="room-tools">
+          <label>
+            <span data-i18n="searchRooms">Search rooms</span>
+            <input id="room-search" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="roomFilter">Filter</span>
+            <select id="room-filter">
+              <option value="all" data-i18n="filterAll">All</option>
+              <option value="joinable" data-i18n="filterJoinable">Joinable</option>
+              <option value="full" data-i18n="filterFull">Full</option>
+            </select>
+          </label>
+        </div>
 
         <div class="table-wrap">
           <table>

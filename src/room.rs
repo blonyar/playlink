@@ -78,9 +78,16 @@ impl RoomRegistry {
     }
 
     pub fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
-        if let Some(room) = self.rooms.get(&room_id) {
+        let should_remove = if let Some(room) = self.rooms.get(&room_id) {
             room.players.remove(&player_id);
             room.publish(&ServerMessage::PlayerLeft { player_id });
+            room.players.is_empty()
+        } else {
+            false
+        };
+
+        if should_remove {
+            self.rooms.remove(&room_id);
         }
     }
 
