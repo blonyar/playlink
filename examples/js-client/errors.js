@@ -37,6 +37,12 @@ function sendRaw(client, text) {
   client.socket.send(text);
 }
 
+function expectId(message, id) {
+  if (message.id !== id) {
+    throw new Error(`expected id ${id}, got ${JSON.stringify(message)}`);
+  }
+}
+
 function waitFor(client, type, predicate = () => true, timeoutMs = 5000) {
   const existing = client.messages.find((message) => message.type === type && predicate(message));
   if (existing) return Promise.resolve(existing);
@@ -64,16 +70,25 @@ function waitFor(client, type, predicate = () => true, timeoutMs = 5000) {
   });
 }
 
-async function expectError(client, code) {
+async function expectError(client, code, id) {
   const message = await waitFor(
     client,
     'error',
-    (message) => message.payload?.code === code,
+    (message) => message.payload?.code === code && (id === undefined || message.id === id),
   );
   if (message.payload.code !== code) {
     throw new Error(`expected error ${code}, got ${JSON.stringify(message)}`);
   }
+  if (id !== undefined) {
+    expectId(message, id);
+  }
   return message;
+}
+
+async function expectPong(client, id) {
+  const pong = await waitFor(client, 'pong', (message) => message.id === id);
+  expectId(pong, id);
+  return pong;
 }
 
 async function fetchRooms() {
@@ -100,64 +115,98 @@ async function waitUntil(predicate, description, timeoutMs = 5000) {
 
 async function createAndJoin(client, roomName, maxPlayers) {
   send(client, {
+    id: `${client.name}-create-room`,
     type: 'create_room',
     payload: { room_name: roomName, max_players: maxPlayers },
   });
   const created = await waitFor(client, 'room_created');
+  expectId(created, `${client.name}-create-room`);
   const roomId = created.payload.room_id;
 
   send(client, {
+    id: `${client.name}-join-room`,
     type: 'join_room',
     payload: { room_id: roomId, player_name: client.name },
   });
-  await waitFor(client, 'room_joined', (message) => message.payload.room_id === roomId);
+  const joined = await waitFor(client, 'room_joined', (message) => message.payload.room_id === roomId);
+  expectId(joined, `${client.name}-join-room`);
   return roomId;
 }
 
 async function main() {
   const missing = await connectClient('missing-room-client');
   send(missing, {
+    id: 'errors-missing-room',
     type: 'join_room',
     payload: {
       room_id: '00000000-0000-0000-0000-000000000000',
       player_name: 'missing-room-client',
     },
   });
-  await expectError(missing, 'room_not_found');
+  await expectError(missing, 'room_not_found', 'errors-missing-room');
   missing.socket.close();
 
   const notInRoom = await connectClient('not-in-room-client');
   send(notInRoom, {
+    id: 'errors-message-not-in-room',
     type: 'room_message',
     payload: { data: { text: 'should fail' } },
   });
-  await expectError(notInRoom, 'not_in_room');
+  await expectError(notInRoom, 'not_in_room', 'errors-message-not-in-room');
+  send(notInRoom, { id: 'errors-ping-after-not-in-room', type: 'ping' });
+  await expectPong(notInRoom, 'errors-ping-after-not-in-room');
   notInRoom.socket.close();
+
+  const leaveNotInRoom = await connectClient('leave-not-in-room-client');
+  send(leaveNotInRoom, {
+    id: 'errors-leave-not-in-room',
+    type: 'leave_room',
+  });
+  await expectError(leaveNotInRoom, 'not_in_room', 'errors-leave-not-in-room');
+  leaveNotInRoom.socket.close();
 
   const invalid = await connectClient('invalid-json-client');
   sendRaw(invalid, '{ not json');
   await expectError(invalid, 'invalid_message');
+  send(invalid, {
+    id: 'errors-unknown-message-type',
+    type: 'definitely_not_supported',
+    payload: {},
+  });
+  await expectError(invalid, 'invalid_message', 'errors-unknown-message-type');
   invalid.socket.close();
 
   const invalidRoomId = await connectClient('invalid-room-id-client');
   send(invalidRoomId, {
+    id: 'errors-invalid-room-id',
     type: 'join_room',
     payload: {
       room_id: 'not-a-uuid',
       player_name: 'invalid-room-id-client',
     },
   });
-  await expectError(invalidRoomId, 'invalid_room_id');
+  await expectError(invalidRoomId, 'invalid_room_id', 'errors-invalid-room-id');
   invalidRoomId.socket.close();
 
   const alice = await connectClient('alice');
   const roomId = await createAndJoin(alice, 'errors-full-room', 1);
+
+  send(alice, {
+    id: 'errors-already-in-room',
+    type: 'join_room',
+    payload: { room_id: roomId, player_name: 'alice-again' },
+  });
+  await expectError(alice, 'already_in_room', 'errors-already-in-room');
+  send(alice, { id: 'errors-ping-after-already-in-room', type: 'ping' });
+  await expectPong(alice, 'errors-ping-after-already-in-room');
+
   const bob = await connectClient('bob');
   send(bob, {
+    id: 'errors-room-full',
     type: 'join_room',
     payload: { room_id: roomId, player_name: 'bob' },
   });
-  await expectError(bob, 'room_full');
+  await expectError(bob, 'room_full', 'errors-room-full');
   bob.socket.close();
 
   let room = await fetchRoom(roomId);

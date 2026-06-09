@@ -1,4 +1,5 @@
 const endpoint = process.env.PLAYLINK_WS_URL ?? 'ws://localhost:7777/ws';
+const httpBase = process.env.PLAYLINK_HTTP_URL ?? 'http://localhost:7777';
 
 function connectClient(name) {
   return new Promise((resolve, reject) => {
@@ -32,6 +33,12 @@ function send(client, message) {
   client.socket.send(JSON.stringify(message));
 }
 
+function expectId(message, id) {
+  if (message.id !== id) {
+    throw new Error(`expected id ${id}, got ${JSON.stringify(message)}`);
+  }
+}
+
 function waitFor(client, type, predicate = () => true, timeoutMs = 5000) {
   const existing = client.messages.find((message) => message.type === type && predicate(message));
   if (existing) return Promise.resolve(existing);
@@ -60,7 +67,7 @@ function waitFor(client, type, predicate = () => true, timeoutMs = 5000) {
 }
 
 async function fetchRooms() {
-  const response = await fetch('http://localhost:7777/api/rooms');
+  const response = await fetch(`${httpBase}/api/rooms`);
   if (!response.ok) {
     throw new Error(`room list failed: ${response.status}`);
   }
@@ -72,6 +79,7 @@ async function main() {
   const bob = await connectClient('bob');
 
   send(alice, {
+    id: 'smoke-create-room',
     type: 'create_room',
     payload: {
       room_name: 'smoke-test',
@@ -80,25 +88,32 @@ async function main() {
   });
 
   const created = await waitFor(alice, 'room_created');
+  expectId(created, 'smoke-create-room');
   const roomId = created.payload.room_id;
 
   send(alice, {
+    id: 'smoke-join-alice',
     type: 'join_room',
     payload: {
       room_id: roomId,
       player_name: 'alice',
     },
   });
-  await waitFor(alice, 'room_joined');
+  const aliceJoined = await waitFor(alice, 'room_joined');
+  expectId(aliceJoined, 'smoke-join-alice');
+  const alicePlayerId = aliceJoined.payload.player_id;
 
   send(bob, {
+    id: 'smoke-join-bob',
     type: 'join_room',
     payload: {
       room_id: roomId,
       player_name: 'bob',
     },
   });
-  await waitFor(bob, 'room_joined');
+  const bobJoined = await waitFor(bob, 'room_joined');
+  expectId(bobJoined, 'smoke-join-bob');
+  const bobPlayerId = bobJoined.payload.player_id;
   await waitFor(alice, 'player_joined', (message) => message.payload.player_name === 'bob');
 
   send(alice, {
@@ -109,7 +124,11 @@ async function main() {
       },
     },
   });
-  await waitFor(bob, 'room_broadcast', (message) => message.payload.data.text === 'hello from alice');
+  await waitFor(
+    bob,
+    'room_broadcast',
+    (message) => message.payload.from === alicePlayerId && message.payload.data.text === 'hello from alice',
+  );
 
   send(bob, {
     type: 'room_message',
@@ -119,7 +138,11 @@ async function main() {
       },
     },
   });
-  await waitFor(alice, 'room_broadcast', (message) => message.payload.data.text === 'hello from bob');
+  await waitFor(
+    alice,
+    'room_broadcast',
+    (message) => message.payload.from === bobPlayerId && message.payload.data.text === 'hello from bob',
+  );
 
   const roomsWithTwoPlayers = await fetchRooms();
   const roomWithTwoPlayers = roomsWithTwoPlayers.find((room) => room.id === roomId);
@@ -128,7 +151,7 @@ async function main() {
   }
 
   bob.socket.close();
-  await waitFor(alice, 'player_left');
+  await waitFor(alice, 'player_left', (message) => message.payload.player_id === bobPlayerId);
 
   const roomsWithOnePlayer = await fetchRooms();
   const roomWithOnePlayer = roomsWithOnePlayer.find((room) => room.id === roomId);
