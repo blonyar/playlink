@@ -16,17 +16,25 @@ Playlink is designed for:
 
 Playlink is not trying to be an MMO backend, a global matchmaking platform, a commercial anti-cheat system, or a thousand-player simulation server.
 
-## v0.1 Goals
+## Current Status
+
+Playlink currently has a stable v0.3 room-server core:
 
 - Rust server
 - WebSocket transport
-- JSON protocol
-- create, join, leave, and list rooms
+- documented JSON protocol
+- create, join, leave, inspect, and list rooms
 - room message broadcast
 - player sessions
+- structured error codes
 - ping/pong heartbeat foundation
+- idle disconnect cleanup
 - HTTP health endpoint
 - simple admin/debug API
+- Web Debug Console
+- Rust unit tests and JavaScript integration scripts
+
+The next planned stage is v0.4 LAN discovery and host-mode groundwork. See `docs/v0.4-lan-host-plan.md`.
 
 ## Planned Modules
 
@@ -153,8 +161,8 @@ npm run idle-timeout
 1. v0.1 dedicated WebSocket room server
 2. JavaScript test client
 3. Web debug console
-4. LAN discovery
-5. host mode
+4. v0.3 protocol and room reliability
+5. v0.4 LAN discovery and host-mode groundwork
 6. relay mode
 7. P2P/NAT traversal experiments
 8. SDKs and example games
