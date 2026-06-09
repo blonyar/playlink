@@ -62,6 +62,21 @@ Health check:
 curl http://localhost:7777/health
 ```
 
+Server/network metadata:
+
+```bash
+curl http://localhost:7777/api/server
+```
+
+Useful v0.4 host metadata environment variables:
+
+```bash
+PLAYLINK_SERVER_NAME="Kang's Playlink Server"
+PLAYLINK_TOPOLOGY=host
+PLAYLINK_PUBLIC_HTTP_URL=http://192.168.1.20:7777
+PLAYLINK_PUBLIC_WS_URL=ws://192.168.1.20:7777/ws
+```
+
 List rooms:
 
 ```bash

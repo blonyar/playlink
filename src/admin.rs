@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     room::{RoomDetail, RoomSnapshot},
-    AppState,
+    AppState, ServerMetadata,
 };
 
 #[derive(Serialize)]
@@ -24,6 +24,10 @@ pub async fn health() -> Json<HealthResponse> {
         name: "playlink",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+pub async fn server_info(State(state): State<AppState>) -> Json<ServerMetadata> {
+    Json(state.config.server.clone())
 }
 
 pub async fn list_rooms(State(state): State<AppState>) -> Json<Vec<RoomSnapshot>> {
