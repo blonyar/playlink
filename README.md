@@ -77,6 +77,18 @@ PLAYLINK_PUBLIC_HTTP_URL=http://192.168.1.20:7777
 PLAYLINK_PUBLIC_WS_URL=ws://192.168.1.20:7777/ws
 ```
 
+LAN discovery is optional and disabled by default. To enable the UDP broadcast prototype:
+
+```bash
+PLAYLINK_LAN_DISCOVERY=1 PLAYLINK_DISCOVERY_PORT=7778 rustup run stable cargo run
+```
+
+Then, from another terminal, run:
+
+```bash
+npm --prefix examples/js-client run discover-lan
+```
+
 List rooms:
 
 ```bash

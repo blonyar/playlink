@@ -1,4 +1,5 @@
 mod admin;
+mod discovery;
 mod protocol;
 mod room;
 mod session;
@@ -171,6 +172,16 @@ async fn main() {
         .init();
 
     let config = Arc::new(Config::from_env());
+    let _discovery_task = if config.server.discovery.enabled {
+        Some(
+            discovery::spawn(config.server.clone())
+                .await
+                .expect("failed to bind LAN discovery socket"),
+        )
+    } else {
+        None
+    };
+
     let rooms = Arc::new(RoomRegistry::new(RoomRegistryConfig {
         default_max_players: config.default_max_players,
         max_players_per_room: config.max_players_per_room,
