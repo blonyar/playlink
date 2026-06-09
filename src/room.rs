@@ -230,3 +230,191 @@ impl Room {
         let _ = self.events.send(event);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tokio::time::{timeout, Duration};
+
+    use super::*;
+
+    fn player(name: &str) -> Player {
+        Player {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn room_registry_new_clamps_zero_config_values_to_one() {
+        let registry = RoomRegistry::new(RoomRegistryConfig {
+            default_max_players: 0,
+            max_players_per_room: 0,
+            room_event_buffer: 0,
+        });
+
+        let room_id = registry.create_room(None, None);
+        let detail = registry.detail(room_id).await.unwrap();
+        assert_eq!(detail.max_players, 1);
+
+        registry.join_room(room_id, player("Alice")).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn create_room_clamps_requested_max_players_to_config_limit() {
+        let registry = RoomRegistry::new(RoomRegistryConfig {
+            default_max_players: 8,
+            max_players_per_room: 3,
+            room_event_buffer: 16,
+        });
+
+        let room_id = registry.create_room(Some("Lobby".to_string()), Some(99));
+        let detail = registry.detail(room_id).await.unwrap();
+
+        assert_eq!(detail.name, "Lobby");
+        assert_eq!(detail.max_players, 3);
+    }
+
+    #[tokio::test]
+    async fn join_room_returns_room_not_found_for_missing_room() {
+        let registry = RoomRegistry::default();
+        let error = registry
+            .join_room(Uuid::new_v4(), player("Alice"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RoomNotFound);
+        assert_eq!(error.message, "Room not found");
+    }
+
+    #[tokio::test]
+    async fn join_room_adds_player_and_updates_detail() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        let detail = registry.detail(room_id).await.unwrap();
+
+        assert_eq!(detail.players.len(), 1);
+        assert_eq!(detail.players[0].id, alice_id);
+        assert_eq!(detail.players[0].name, "Alice");
+    }
+
+    #[tokio::test]
+    async fn join_room_publishes_player_joined_event() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let event = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::PlayerJoined {
+                player_id,
+                player_name,
+            } => {
+                assert_eq!(player_id, alice_id);
+                assert_eq!(player_name, "Alice");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn join_room_rejects_when_room_is_full() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+
+        registry.join_room(room_id, player("Alice")).await.unwrap();
+        let error = registry
+            .join_room(room_id, player("Bob"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RoomFull);
+        assert_eq!(error.message, "Room is full");
+    }
+
+    #[tokio::test]
+    async fn leave_room_removes_empty_room() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.leave_room(room_id, alice_id).await;
+
+        assert!(registry.detail(room_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn leave_room_keeps_room_when_other_players_remain() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let bob = player("Bob");
+        let bob_id = bob.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.join_room(room_id, bob).await.unwrap();
+        registry.leave_room(room_id, alice_id).await;
+
+        let detail = registry.detail(room_id).await.unwrap();
+        assert_eq!(detail.players.len(), 1);
+        assert_eq!(detail.players[0].id, bob_id);
+    }
+
+    #[tokio::test]
+    async fn broadcast_publishes_room_message_event() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let _ = receiver.recv().await.unwrap();
+
+        registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap();
+        let event = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::Message { from, data } => {
+                assert_eq!(from, alice_id);
+                assert_eq!(data, json!({ "move": "left" }));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshots_include_room_player_counts() {
+        let registry = RoomRegistry::default();
+        let room_a = registry.create_room(Some("A".to_string()), Some(4));
+        let room_b = registry.create_room(Some("B".to_string()), Some(4));
+
+        registry.join_room(room_a, player("A1")).await.unwrap();
+        registry.join_room(room_a, player("A2")).await.unwrap();
+        registry.join_room(room_b, player("B1")).await.unwrap();
+
+        let snapshots = registry.snapshots().await;
+        let snapshot_a = snapshots.iter().find(|room| room.id == room_a).unwrap();
+        let snapshot_b = snapshots.iter().find(|room| room.id == room_b).unwrap();
+
+        assert_eq!(snapshot_a.player_count, 2);
+        assert_eq!(snapshot_b.player_count, 1);
+    }
+}
