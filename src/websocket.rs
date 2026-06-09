@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -8,16 +6,22 @@ use axum::{
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
-use tokio::time::timeout;
+use tokio::{
+    sync::{broadcast, mpsc},
+    time::timeout,
+};
+use uuid::Uuid;
 
 use crate::{
-    protocol::{ClientMessage, ServerMessage},
+    protocol::{
+        ClientEnvelope, ClientMessage, ErrorCode, PlaylinkError, ServerEnvelope, ServerMessage,
+    },
     room::Player,
     session::Session,
     AppState,
 };
 
-const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const OUTGOING_QUEUE_SIZE: usize = 128;
 
 pub async fn connect(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -25,7 +29,8 @@ pub async fn connect(ws: WebSocketUpgrade, State(state): State<AppState>) -> imp
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
-    let (outgoing_tx, mut outgoing_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<String>(OUTGOING_QUEUE_SIZE);
+    let (close_tx, mut close_rx) = mpsc::channel::<()>(1);
     let mut session = Session::default();
     let mut room_events_task: Option<tokio::task::JoinHandle<()>> = None;
 
@@ -36,11 +41,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             }
         }
     });
-    let idle_timeout = session_idle_timeout();
+    let idle_timeout = state.config.session_idle_timeout;
 
     loop {
-        let Ok(next_message) = timeout(idle_timeout, receiver.next()).await else {
-            break;
+        let next_message = tokio::select! {
+            _ = close_rx.recv() => break,
+            next_message = timeout(idle_timeout, receiver.next()) => {
+                let Ok(next_message) = next_message else {
+                    break;
+                };
+                next_message
+            }
         };
 
         let Some(Ok(message)) = next_message else {
@@ -51,28 +62,57 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             continue;
         };
 
-        match serde_json::from_str::<ClientMessage>(&text) {
-            Ok(client_message) => {
-                handle_client_message(
-                    client_message,
+        if text.len() > state.config.max_message_bytes {
+            let request_id = extract_request_id(&text);
+            if send(
+                &outgoing_tx,
+                request_id,
+                ServerMessage::error(ErrorCode::MessageTooLarge, "Message is too large"),
+            )
+            .is_err()
+            {
+                break;
+            }
+            continue;
+        }
+
+        match serde_json::from_str::<ClientEnvelope>(&text) {
+            Ok(envelope) => {
+                if handle_client_message(
+                    envelope.id,
+                    envelope.message,
                     &state,
                     &mut session,
                     &outgoing_tx,
+                    &close_tx,
                     &mut room_events_task,
                 )
-                .await;
+                .await
+                .is_err()
+                {
+                    break;
+                }
             }
-            Err(error) => send(
-                &outgoing_tx,
-                &ServerMessage::Error {
-                    message: format!("invalid message: {error}"),
-                },
-            ),
+            Err(error) => {
+                let request_id = extract_request_id(&text);
+                if send(
+                    &outgoing_tx,
+                    request_id,
+                    ServerMessage::error(
+                        ErrorCode::InvalidMessage,
+                        format!("Invalid message: {error}"),
+                    ),
+                )
+                .is_err()
+                {
+                    break;
+                }
+            }
         }
     }
 
     if let Some(room_id) = session.room_id {
-        state.rooms.leave_room(room_id, session.player_id);
+        state.rooms.leave_room(room_id, session.player_id).await;
     }
 
     if let Some(task) = room_events_task {
@@ -83,34 +123,57 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 }
 
 async fn handle_client_message(
+    request_id: Option<String>,
     message: ClientMessage,
     state: &AppState,
     session: &mut Session,
-    outgoing_tx: &tokio::sync::mpsc::UnboundedSender<String>,
+    outgoing_tx: &mpsc::Sender<String>,
+    close_tx: &mpsc::Sender<()>,
     room_events_task: &mut Option<tokio::task::JoinHandle<()>>,
-) {
+) -> Result<(), mpsc::error::TrySendError<String>> {
     match message {
         ClientMessage::CreateRoom {
             room_name,
             max_players,
         } => {
             let room_id = state.rooms.create_room(room_name, max_players);
-            send(outgoing_tx, &ServerMessage::RoomCreated { room_id });
+            send(
+                outgoing_tx,
+                request_id,
+                ServerMessage::RoomCreated { room_id },
+            )?;
         }
         ClientMessage::JoinRoom {
             room_id,
             player_name,
         } => {
-            if let Some(previous_room_id) = session.room_id {
-                state.rooms.leave_room(previous_room_id, session.player_id);
+            if session.room_id.is_some() {
+                send(
+                    outgoing_tx,
+                    request_id,
+                    ServerMessage::error(
+                        ErrorCode::AlreadyInRoom,
+                        "Leave the current room before joining another room",
+                    ),
+                )?;
+                return Ok(());
             }
+
+            let Ok(room_id) = Uuid::parse_str(&room_id) else {
+                send(
+                    outgoing_tx,
+                    request_id,
+                    ServerMessage::error(ErrorCode::InvalidRoomId, "Invalid room id"),
+                )?;
+                return Ok(());
+            };
 
             let player = Player {
                 id: session.player_id,
                 name: player_name.clone(),
             };
 
-            match state.rooms.join_room(room_id, player) {
+            match state.rooms.join_room(room_id, player).await {
                 Ok(mut room_events) => {
                     session.room_id = Some(room_id);
                     session.player_name = Some(player_name);
@@ -119,59 +182,115 @@ async fn handle_client_message(
                         task.abort();
                     }
 
-                    let room_outgoing_tx = outgoing_tx.clone();
-                    *room_events_task = Some(tokio::spawn(async move {
-                        while let Ok(text) = room_events.recv().await {
-                            if room_outgoing_tx.send(text).is_err() {
-                                break;
-                            }
-                        }
-                    }));
-
                     send(
                         outgoing_tx,
-                        &ServerMessage::RoomJoined {
+                        request_id,
+                        ServerMessage::RoomJoined {
                             room_id,
                             player_id: session.player_id,
                         },
-                    );
+                    )?;
+
+                    let room_outgoing_tx = outgoing_tx.clone();
+                    let room_close_tx = close_tx.clone();
+                    *room_events_task = Some(tokio::spawn(async move {
+                        loop {
+                            match room_events.recv().await {
+                                Ok(event) => {
+                                    let message = ServerMessage::from_room_event(event);
+                                    if send(&room_outgoing_tx, None, message).is_err() {
+                                        let _ = room_close_tx.try_send(());
+                                        break;
+                                    }
+                                }
+                                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                                    if send(
+                                        &room_outgoing_tx,
+                                        None,
+                                        ServerMessage::EventLagged { skipped },
+                                    )
+                                    .is_err()
+                                    {
+                                        let _ = room_close_tx.try_send(());
+                                        break;
+                                    }
+                                }
+                                Err(broadcast::error::RecvError::Closed) => break,
+                            }
+                        }
+                    }));
                 }
-                Err(message) => send(outgoing_tx, &ServerMessage::Error { message }),
+                Err(error) => send_error(outgoing_tx, request_id, error)?,
             }
         }
         ClientMessage::LeaveRoom => {
             if let Some(room_id) = session.room_id.take() {
-                state.rooms.leave_room(room_id, session.player_id);
-            }
-        }
-        ClientMessage::RoomMessage { data } => {
-            if let Some(room_id) = session.room_id {
-                if let Err(message) = state.rooms.broadcast(room_id, session.player_id, data) {
-                    send(outgoing_tx, &ServerMessage::Error { message });
+                state.rooms.leave_room(room_id, session.player_id).await;
+                if let Some(task) = room_events_task.take() {
+                    task.abort();
                 }
             } else {
                 send(
                     outgoing_tx,
-                    &ServerMessage::Error {
-                        message: "join a room before sending room messages".to_string(),
-                    },
-                );
+                    request_id,
+                    ServerMessage::error(ErrorCode::NotInRoom, "Not in a room"),
+                )?;
             }
         }
-        ClientMessage::Ping => send(outgoing_tx, &ServerMessage::Pong),
+        ClientMessage::RoomMessage { data } => {
+            if let Some(room_id) = session.room_id {
+                if let Err(error) = state
+                    .rooms
+                    .broadcast(room_id, session.player_id, data)
+                    .await
+                {
+                    send_error(outgoing_tx, request_id, error)?;
+                }
+            } else {
+                send(
+                    outgoing_tx,
+                    request_id,
+                    ServerMessage::error(
+                        ErrorCode::NotInRoom,
+                        "Join a room before sending room messages",
+                    ),
+                )?;
+            }
+        }
+        ClientMessage::Ping => {
+            send(outgoing_tx, request_id, ServerMessage::Pong)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn send_error(
+    outgoing_tx: &mpsc::Sender<String>,
+    request_id: Option<String>,
+    error: PlaylinkError,
+) -> Result<(), mpsc::error::TrySendError<String>> {
+    send(
+        outgoing_tx,
+        request_id,
+        ServerMessage::Error(error.into_payload()),
+    )
+}
+
+fn send(
+    outgoing_tx: &mpsc::Sender<String>,
+    request_id: Option<String>,
+    message: ServerMessage,
+) -> Result<(), mpsc::error::TrySendError<String>> {
+    let envelope = ServerEnvelope::new(request_id, message);
+    if let Ok(text) = serde_json::to_string(&envelope) {
+        outgoing_tx.try_send(text)
+    } else {
+        Ok(())
     }
 }
 
-fn send(outgoing_tx: &tokio::sync::mpsc::UnboundedSender<String>, message: &ServerMessage) {
-    if let Ok(text) = serde_json::to_string(message) {
-        let _ = outgoing_tx.send(text);
-    }
-}
-
-fn session_idle_timeout() -> Duration {
-    std::env::var("PLAYLINK_SESSION_IDLE_TIMEOUT_SECS")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .map(Duration::from_secs)
-        .unwrap_or(DEFAULT_SESSION_IDLE_TIMEOUT)
+fn extract_request_id(text: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    value.get("id")?.as_str().map(ToString::to_string)
 }

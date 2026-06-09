@@ -27,7 +27,7 @@ pub async fn health() -> Json<HealthResponse> {
 }
 
 pub async fn list_rooms(State(state): State<AppState>) -> Json<Vec<RoomSnapshot>> {
-    Json(state.rooms.snapshots())
+    Json(state.rooms.snapshots().await)
 }
 
 pub async fn get_room(
@@ -37,6 +37,7 @@ pub async fn get_room(
     state
         .rooms
         .detail(room_id)
+        .await
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }

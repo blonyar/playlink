@@ -1,14 +1,34 @@
+use std::{collections::HashMap, sync::Arc};
+
 use dashmap::DashMap;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
-use crate::protocol::ServerMessage;
+use crate::protocol::{ErrorCode, PlaylinkError, RoomEvent};
 
 #[derive(Default)]
 pub struct RoomRegistry {
     rooms: DashMap<Uuid, Room>,
+    config: RoomRegistryConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct RoomRegistryConfig {
+    pub default_max_players: usize,
+    pub max_players_per_room: usize,
+    pub room_event_buffer: usize,
+}
+
+impl Default for RoomRegistryConfig {
+    fn default() -> Self {
+        Self {
+            default_max_players: 8,
+            max_players_per_room: 16,
+            room_event_buffer: 256,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -16,8 +36,14 @@ pub struct Room {
     pub id: Uuid,
     pub name: String,
     pub max_players: usize,
-    pub players: DashMap<Uuid, Player>,
-    events: broadcast::Sender<String>,
+    state: Arc<Mutex<RoomState>>,
+    events: broadcast::Sender<RoomEvent>,
+}
+
+#[derive(Debug, Default)]
+pub struct RoomState {
+    players: HashMap<Uuid, Player>,
+    removing: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -43,17 +69,31 @@ pub struct RoomDetail {
 }
 
 impl RoomRegistry {
+    pub fn new(config: RoomRegistryConfig) -> Self {
+        Self {
+            rooms: DashMap::new(),
+            config: RoomRegistryConfig {
+                default_max_players: config.default_max_players.max(1),
+                max_players_per_room: config.max_players_per_room.max(1),
+                room_event_buffer: config.room_event_buffer.max(1),
+            },
+        }
+    }
+
     pub fn create_room(&self, name: Option<String>, max_players: Option<usize>) -> Uuid {
         let id = Uuid::new_v4();
-        let (events, _) = broadcast::channel(256);
+        let max_players = max_players
+            .unwrap_or(self.config.default_max_players)
+            .clamp(1, self.config.max_players_per_room);
+        let (events, _) = broadcast::channel(self.config.room_event_buffer);
 
         self.rooms.insert(
             id,
             Room {
                 id,
                 name: name.unwrap_or_else(|| "Untitled Room".to_string()),
-                max_players: max_players.unwrap_or(8),
-                players: DashMap::new(),
+                max_players,
+                state: Arc::new(Mutex::new(RoomState::default())),
                 events,
             },
         );
@@ -61,23 +101,42 @@ impl RoomRegistry {
         id
     }
 
-    pub fn join_room(
+    pub async fn join_room(
         &self,
         room_id: Uuid,
         player: Player,
-    ) -> Result<broadcast::Receiver<String>, String> {
+    ) -> Result<broadcast::Receiver<RoomEvent>, PlaylinkError> {
         let room = self
             .rooms
             .get(&room_id)
-            .ok_or_else(|| "room not found".to_string())?;
-
-        if room.players.len() >= room.max_players {
-            return Err("room is full".to_string());
-        }
+            .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
 
         let receiver = room.events.subscribe();
-        room.players.insert(player.id, player.clone());
-        room.publish(&ServerMessage::PlayerJoined {
+        {
+            let mut state = room.state.lock().await;
+
+            if state.removing {
+                return Err(PlaylinkError::new(
+                    ErrorCode::RoomNotFound,
+                    "Room not found",
+                ));
+            }
+
+            if state.players.contains_key(&player.id) {
+                return Err(PlaylinkError::new(
+                    ErrorCode::AlreadyInRoom,
+                    "Player is already in this room",
+                ));
+            }
+
+            if state.players.len() >= room.max_players {
+                return Err(PlaylinkError::new(ErrorCode::RoomFull, "Room is full"));
+            }
+
+            state.players.insert(player.id, player.clone());
+        }
+
+        room.publish(RoomEvent::PlayerJoined {
             player_id: player.id,
             player_name: player.name,
         });
@@ -85,11 +144,23 @@ impl RoomRegistry {
         Ok(receiver)
     }
 
-    pub fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
+    pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
         let should_remove = if let Some(room) = self.rooms.get(&room_id) {
-            room.players.remove(&player_id);
-            room.publish(&ServerMessage::PlayerLeft { player_id });
-            room.players.is_empty()
+            let removed = {
+                let mut state = room.state.lock().await;
+                let removed = state.players.remove(&player_id).is_some();
+                let is_empty = state.players.is_empty();
+                if is_empty {
+                    state.removing = true;
+                }
+                (removed, is_empty)
+            };
+
+            if removed.0 {
+                room.publish(RoomEvent::PlayerLeft { player_id });
+            }
+
+            removed.1
         } else {
             false
         };
@@ -99,42 +170,251 @@ impl RoomRegistry {
         }
     }
 
-    pub fn broadcast(&self, room_id: Uuid, from: Uuid, data: Value) -> Result<(), String> {
+    pub async fn broadcast(
+        &self,
+        room_id: Uuid,
+        from: Uuid,
+        data: Value,
+    ) -> Result<(), PlaylinkError> {
         let room = self
             .rooms
             .get(&room_id)
-            .ok_or_else(|| "room not found".to_string())?;
+            .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
 
-        room.publish(&ServerMessage::RoomBroadcast { from, data });
+        room.publish(RoomEvent::Message { from, data });
         Ok(())
     }
 
-    pub fn snapshots(&self) -> Vec<RoomSnapshot> {
-        self.rooms
+    pub async fn snapshots(&self) -> Vec<RoomSnapshot> {
+        let rooms: Vec<_> = self
+            .rooms
             .iter()
-            .map(|room| RoomSnapshot {
-                id: room.id,
-                name: room.name.clone(),
-                max_players: room.max_players,
-                player_count: room.players.len(),
+            .map(|room| {
+                (
+                    room.id,
+                    room.name.clone(),
+                    room.max_players,
+                    room.state.clone(),
+                )
             })
-            .collect()
+            .collect();
+
+        let mut snapshots = Vec::with_capacity(rooms.len());
+        for (id, name, max_players, state) in rooms {
+            let state = state.lock().await;
+            snapshots.push(RoomSnapshot {
+                id,
+                name,
+                max_players,
+                player_count: state.players.len(),
+            });
+        }
+
+        snapshots
     }
 
-    pub fn detail(&self, room_id: Uuid) -> Option<RoomDetail> {
-        self.rooms.get(&room_id).map(|room| RoomDetail {
+    pub async fn detail(&self, room_id: Uuid) -> Option<RoomDetail> {
+        let room = self.rooms.get(&room_id)?;
+        let state = room.state.lock().await;
+        Some(RoomDetail {
             id: room.id,
             name: room.name.clone(),
             max_players: room.max_players,
-            players: room.players.iter().map(|player| player.clone()).collect(),
+            players: state.players.values().cloned().collect(),
         })
     }
 }
 
 impl Room {
-    fn publish(&self, message: &ServerMessage) {
-        if let Ok(text) = serde_json::to_string(message) {
-            let _ = self.events.send(text);
+    fn publish(&self, event: RoomEvent) {
+        let _ = self.events.send(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tokio::time::{timeout, Duration};
+
+    use super::*;
+
+    fn player(name: &str) -> Player {
+        Player {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
         }
+    }
+
+    #[tokio::test]
+    async fn room_registry_new_clamps_zero_config_values_to_one() {
+        let registry = RoomRegistry::new(RoomRegistryConfig {
+            default_max_players: 0,
+            max_players_per_room: 0,
+            room_event_buffer: 0,
+        });
+
+        let room_id = registry.create_room(None, None);
+        let detail = registry.detail(room_id).await.unwrap();
+        assert_eq!(detail.max_players, 1);
+
+        registry.join_room(room_id, player("Alice")).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn create_room_clamps_requested_max_players_to_config_limit() {
+        let registry = RoomRegistry::new(RoomRegistryConfig {
+            default_max_players: 8,
+            max_players_per_room: 3,
+            room_event_buffer: 16,
+        });
+
+        let room_id = registry.create_room(Some("Lobby".to_string()), Some(99));
+        let detail = registry.detail(room_id).await.unwrap();
+
+        assert_eq!(detail.name, "Lobby");
+        assert_eq!(detail.max_players, 3);
+    }
+
+    #[tokio::test]
+    async fn join_room_returns_room_not_found_for_missing_room() {
+        let registry = RoomRegistry::default();
+        let error = registry
+            .join_room(Uuid::new_v4(), player("Alice"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RoomNotFound);
+        assert_eq!(error.message, "Room not found");
+    }
+
+    #[tokio::test]
+    async fn join_room_adds_player_and_updates_detail() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        let detail = registry.detail(room_id).await.unwrap();
+
+        assert_eq!(detail.players.len(), 1);
+        assert_eq!(detail.players[0].id, alice_id);
+        assert_eq!(detail.players[0].name, "Alice");
+    }
+
+    #[tokio::test]
+    async fn join_room_publishes_player_joined_event() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let event = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::PlayerJoined {
+                player_id,
+                player_name,
+            } => {
+                assert_eq!(player_id, alice_id);
+                assert_eq!(player_name, "Alice");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn join_room_rejects_when_room_is_full() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+
+        registry.join_room(room_id, player("Alice")).await.unwrap();
+        let error = registry
+            .join_room(room_id, player("Bob"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RoomFull);
+        assert_eq!(error.message, "Room is full");
+    }
+
+    #[tokio::test]
+    async fn leave_room_removes_empty_room() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.leave_room(room_id, alice_id).await;
+
+        assert!(registry.detail(room_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn leave_room_keeps_room_when_other_players_remain() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let bob = player("Bob");
+        let bob_id = bob.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.join_room(room_id, bob).await.unwrap();
+        registry.leave_room(room_id, alice_id).await;
+
+        let detail = registry.detail(room_id).await.unwrap();
+        assert_eq!(detail.players.len(), 1);
+        assert_eq!(detail.players[0].id, bob_id);
+    }
+
+    #[tokio::test]
+    async fn broadcast_publishes_room_message_event() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let _ = receiver.recv().await.unwrap();
+
+        registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap();
+        let event = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::Message { from, data } => {
+                assert_eq!(from, alice_id);
+                assert_eq!(data, json!({ "move": "left" }));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshots_include_room_player_counts() {
+        let registry = RoomRegistry::default();
+        let room_a = registry.create_room(Some("A".to_string()), Some(4));
+        let room_b = registry.create_room(Some("B".to_string()), Some(4));
+
+        registry.join_room(room_a, player("A1")).await.unwrap();
+        registry.join_room(room_a, player("A2")).await.unwrap();
+        registry.join_room(room_b, player("B1")).await.unwrap();
+
+        let snapshots = registry.snapshots().await;
+        let snapshot_a = snapshots.iter().find(|room| room.id == room_a).unwrap();
+        let snapshot_b = snapshots.iter().find(|room| room.id == room_b).unwrap();
+
+        assert_eq!(snapshot_a.player_count, 2);
+        assert_eq!(snapshot_b.player_count, 1);
     }
 }
