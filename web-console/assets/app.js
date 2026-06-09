@@ -2,7 +2,7 @@ const translations = {
   en: {
     appTitle: 'Web Debug Console', appSubtitle: 'Monitor the server, inspect rooms, and simulate a game client.', language: 'Language', refreshData: 'Refresh Data',
     tabOverview: 'Overview', tabRooms: 'Rooms', tabSimulator: 'Simulator', tabMessages: 'Messages', monitor: 'Monitor', serverOverview: 'Server Overview', overviewHelp: 'Read-only status for the running Playlink process.',
-    health: 'Health', version: 'Version', rooms: 'Rooms', players: 'Players', websocket: 'WebSocket', workflowTitle: 'Recommended workflow', workflowStep1: 'Simulator: connect and set player name.', workflowStep2: 'Rooms: create or join a room.', workflowStep3: 'Messages: send room messages and inspect events.',
+    health: 'Health', version: 'Version', rooms: 'Rooms', players: 'Players', websocket: 'WebSocket', networkInfo: 'Network / Host', serverName: 'Server name', topology: 'Topology', bindAddress: 'Bind address', websocketPath: 'WebSocket path', discoveryStatus: 'LAN discovery', workflowTitle: 'Recommended workflow', workflowStep1: 'Simulator: connect and set player name.', workflowStep2: 'Rooms: create or join a room.', workflowStep3: 'Messages: send room messages and inspect events.',
     disconnectTitle: 'Why does it disconnect?', disconnectBody: 'The server closes idle WebSocket sessions after 30 seconds. This console sends an automatic ping every 10 seconds while connected, so it should stay connected unless the server stops or the network drops.',
     inspector: 'Inspector', roomInspector: 'Room Inspector', refreshRooms: 'Refresh Rooms', roomsHelp: 'Create rooms here, or join an existing room as the connected simulator client.', name: 'Name', action: 'Action', noRoomsLoaded: 'No rooms loaded.', noRooms: 'No rooms.', join: 'Join', current: 'Current', advancedConnection: 'Advanced connection', searchRooms: 'Search rooms', roomFilter: 'Filter', filterAll: 'All', filterJoinable: 'Joinable', filterFull: 'Full',
     simulator: 'Simulator', clientSimulator: 'Client Simulator', simulatorHelp: 'This area only controls one simulated client connection and identity.', connection: 'Connection', websocketUrl: 'WebSocket URL', keepaliveStatus: 'Keepalive', connect: 'Connect', disconnect: 'Disconnect', ping: 'Ping', playerName: 'Player name', nextStepTitle: 'Next step', nextStepBody: 'After connecting, go to Rooms to create or join a room. After joining, go to Messages to send room messages.',
@@ -13,7 +13,7 @@ const translations = {
   zh: {
     appTitle: 'Web 调试控制台', appSubtitle: '监控服务状态、查看房间，并模拟一个游戏客户端。', language: '语言', refreshData: '刷新数据',
     tabOverview: '总览', tabRooms: '房间', tabSimulator: '模拟器', tabMessages: '消息', monitor: '监控', serverOverview: '服务总览', overviewHelp: '这里只展示当前 Playlink 服务的只读状态。',
-    health: '健康状态', version: '版本', rooms: '房间数', players: '玩家数', websocket: 'WebSocket', workflowTitle: '推荐流程', workflowStep1: '模拟器：先连接并设置玩家名。', workflowStep2: '房间：创建或加入房间。', workflowStep3: '消息：发送房间消息并查看事件。',
+    health: '健康状态', version: '版本', rooms: '房间数', players: '玩家数', websocket: 'WebSocket', networkInfo: '网络 / 主机', serverName: '服务名称', topology: '拓扑', bindAddress: '监听地址', websocketPath: 'WebSocket 路径', discoveryStatus: '局域网发现', workflowTitle: '推荐流程', workflowStep1: '模拟器：先连接并设置玩家名。', workflowStep2: '房间：创建或加入房间。', workflowStep3: '消息：发送房间消息并查看事件。',
     disconnectTitle: '为什么会自动断开？', disconnectBody: '服务端会在 WebSocket 空闲 30 秒后断开连接。这是当前设计，用来清理无活动客户端。控制台连接后会每 10 秒自动 ping 保活，所以除非服务停止或网络断开，一般不会自己掉线。',
     inspector: '检查器', roomInspector: '房间检查器', refreshRooms: '刷新房间', roomsHelp: '在这里创建房间，或让已连接的模拟客户端加入已有房间。', name: '名称', action: '操作', noRoomsLoaded: '还没有加载房间。', noRooms: '暂无房间。', join: '加入', current: '当前', advancedConnection: '高级连接设置', searchRooms: '搜索房间', roomFilter: '筛选', filterAll: '全部', filterJoinable: '可加入', filterFull: '已满',
     simulator: '模拟器', clientSimulator: '客户端模拟器', simulatorHelp: '这里只负责一个模拟客户端的连接和身份。', connection: '连接', websocketUrl: 'WebSocket 地址', keepaliveStatus: '保活', connect: '连接', disconnect: '断开', ping: 'Ping', playerName: '玩家名', nextStepTitle: '下一步', nextStepBody: '连接后去“房间”创建或加入房间；加入后去“消息”发送房间消息。',
@@ -25,7 +25,7 @@ const translations = {
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
-  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'),
+  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'),
   roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), leaveRoomButton: document.querySelector('#leave-room-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), sendMessageButton: document.querySelector('#send-message-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
@@ -112,6 +112,23 @@ async function refreshHealth() {
   } catch (error) {
     elements.healthStatus.textContent = 'error';
     log('health error', error.message);
+  }
+}
+
+async function refreshServerInfo() {
+  try {
+    const response = await fetch('/api/server');
+    const server = await response.json();
+    elements.serverName.textContent = server.name;
+    elements.serverTopology.textContent = server.topology;
+    elements.serverBindAddr.textContent = server.bind_addr;
+    elements.serverWsPath.textContent = server.public_ws_url ?? server.websocket_path;
+    elements.serverDiscovery.textContent = server.discovery?.enabled
+      ? `${server.discovery.method ?? 'enabled'}:${server.discovery.port}`
+      : t('off');
+  } catch (error) {
+    elements.serverName.textContent = 'error';
+    log('server info error', error.message);
   }
 }
 
@@ -224,7 +241,7 @@ function renderRooms() {
   }));
 }
 
-async function refreshAll() { await Promise.all([refreshHealth(), refreshRooms()]); }
+async function refreshAll() { await Promise.all([refreshHealth(), refreshServerInfo(), refreshRooms()]); }
 
 function connect() {
   if (socket) return;
