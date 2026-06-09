@@ -8,7 +8,7 @@ const translations = {
     simulator: 'Simulator', clientSimulator: 'Client Simulator', simulatorHelp: 'This area only controls one simulated client connection and identity.', connection: 'Connection', websocketUrl: 'WebSocket URL', keepaliveStatus: 'Keepalive', connect: 'Connect', disconnect: 'Disconnect', ping: 'Ping', playerName: 'Player name', nextStepTitle: 'Next step', nextStepBody: 'After connecting, go to Rooms to create or join a room. After joining, go to Messages to send room messages.',
     createRoom: 'Create Room', leaveRoom: 'Leave Room', roomName: 'Room name', maxPlayers: 'Max players', sendRoomMessage: 'Send Room Message', messagePayload: 'Message payload JSON', logs: 'Logs', messageLog: 'Message Log', clear: 'Clear', messagesHelp: 'After joining a room, send room messages here and inspect sent/received events.', close: 'Close',
     sessionState: 'Session State', currentPlayer: 'Current player', currentRoom: 'Current room', roomDetail: 'Room Detail', selectedRoom: 'Selected room', playerList: 'Player List', noPlayers: 'No players.',
-    off: 'off', onAutoPing: 'on, auto ping every 10s', disconnected: 'disconnected', connecting: 'connecting', connected: 'connected', notConnected: 'Connect the simulator first.', notInRoom: 'Join a room before sending room messages.', joinedRoom: 'Joined room', createdRoom: 'Created room',
+    off: 'off', onAutoPing: 'on, auto ping every 10s', disconnected: 'disconnected', connecting: 'connecting', connected: 'connected', notConnected: 'Connect the simulator first.', notInRoom: 'Join a room before sending room messages.', joinedRoom: 'Joined room', createdRoom: 'Created room', roomDetailUnavailable: 'Room detail unavailable',
   },
   zh: {
     appTitle: 'Web 调试控制台', appSubtitle: '监控服务状态、查看房间，并模拟一个游戏客户端。', language: '语言', refreshData: '刷新数据',
@@ -19,7 +19,7 @@ const translations = {
     simulator: '模拟器', clientSimulator: '客户端模拟器', simulatorHelp: '这里只负责一个模拟客户端的连接和身份。', connection: '连接', websocketUrl: 'WebSocket 地址', keepaliveStatus: '保活', connect: '连接', disconnect: '断开', ping: 'Ping', playerName: '玩家名', nextStepTitle: '下一步', nextStepBody: '连接后去“房间”创建或加入房间；加入后去“消息”发送房间消息。',
     createRoom: '创建房间', leaveRoom: '离开房间', roomName: '房间名', maxPlayers: '最大玩家数', sendRoomMessage: '发送房间消息', messagePayload: '消息 JSON', logs: '日志', messageLog: '消息日志', clear: '清空', messagesHelp: '加入房间后，在这里发送房间消息并查看发送/接收事件。', close: '关闭',
     sessionState: '会话状态', currentPlayer: '当前玩家', currentRoom: '当前房间', roomDetail: '房间详情', selectedRoom: '选中房间', playerList: '玩家列表', noPlayers: '暂无玩家。',
-    off: '关闭', onAutoPing: '开启，每 10 秒自动 ping', disconnected: '未连接', connecting: '连接中', connected: '已连接', notConnected: '请先在模拟器里连接。', notInRoom: '请先加入房间，再发送房间消息。', joinedRoom: '已加入房间', createdRoom: '已创建房间',
+    off: '关闭', onAutoPing: '开启，每 10 秒自动 ping', disconnected: '未连接', connecting: '连接中', connected: '已连接', notConnected: '请先在模拟器里连接。', notInRoom: '请先加入房间，再发送房间消息。', joinedRoom: '已加入房间', createdRoom: '已创建房间', roomDetailUnavailable: '房间详情不可用',
   },
 };
 
@@ -141,30 +141,39 @@ async function renderSelectedRoom() {
     return;
   }
 
-  const response = await fetch(`/api/rooms/${selectedRoomId}`);
-  if (!response.ok) {
+  try {
+    const response = await fetch(`/api/rooms/${selectedRoomId}`);
+    if (!response.ok) {
+      const missingRoomId = selectedRoomId;
+      selectedRoomId = null;
+      await renderSelectedRoom();
+      log(t('roomDetailUnavailable'), missingRoomId);
+      return;
+    }
+
+    const room = await response.json();
+    elements.selectedRoomId.textContent = room.id;
+    elements.selectedRoomName.textContent = room.name;
+    elements.selectedRoomCount.textContent = `${room.players.length} / ${room.max_players}`;
+
+    if (room.players.length === 0) {
+      const empty = document.createElement('li');
+      empty.textContent = t('noPlayers');
+      elements.selectedRoomPlayers.replaceChildren(empty);
+      return;
+    }
+
+    elements.selectedRoomPlayers.replaceChildren(...room.players.map((player) => {
+      const item = document.createElement('li');
+      item.textContent = `${player.name} · ${player.id}`;
+      return item;
+    }));
+  } catch (error) {
+    const failedRoomId = selectedRoomId;
     selectedRoomId = null;
     await renderSelectedRoom();
-    return;
+    log(t('roomDetailUnavailable'), `${failedRoomId}: ${error.message}`);
   }
-
-  const room = await response.json();
-  elements.selectedRoomId.textContent = room.id;
-  elements.selectedRoomName.textContent = room.name;
-  elements.selectedRoomCount.textContent = `${room.players.length} / ${room.max_players}`;
-
-  if (room.players.length === 0) {
-    const empty = document.createElement('li');
-    empty.textContent = t('noPlayers');
-    elements.selectedRoomPlayers.replaceChildren(empty);
-    return;
-  }
-
-  elements.selectedRoomPlayers.replaceChildren(...room.players.map((player) => {
-    const item = document.createElement('li');
-    item.textContent = `${player.name} · ${player.id}`;
-    return item;
-  }));
 }
 
 function renderRooms() {

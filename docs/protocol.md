@@ -100,6 +100,8 @@ Leaves the current room.
 }
 ```
 
+On success, the server removes the player from the current room but does not send a dedicated success acknowledgement. Clients should clear their local current-room state after sending `leave_room` successfully.
+
 If the session is not in a room, the server returns `not_in_room`.
 
 ### `room_message`
@@ -246,22 +248,23 @@ Sent when the server detects that this client missed room events because it was 
 | `already_in_room` | Session must leave current room before joining another | no |
 | `invalid_room_id` | Room id format is invalid | no |
 | `message_too_large` | Incoming message exceeds configured byte limit | no |
-| `rate_limited` | Client is sending too much traffic | yes |
+| `rate_limited` | Reserved for future traffic throttling; not currently emitted | yes |
 | `internal_error` | Server-side unexpected error | maybe |
 
 ## 5. Room Lifecycle
 
 ```text
-create_room → room_created
-join_room   → room_joined + player_joined event
+create_room  → room_created
+join_room    → room_joined + player_joined event
 room_message → room_broadcast event
-leave_room  → player_left event
+leave_room   → player_left event for other room members
 last player leaves/disconnects → room is deleted
 ```
 
 Current behavior:
 
 - Empty rooms are cleaned up immediately after the last player leaves or disconnects.
+- A successful `leave_room` has no dedicated acknowledgement message in v0.3; remaining room members receive `player_left`.
 - A client can be in at most one room.
 - Joining another room requires an explicit `leave_room` first.
 - Server state is in-memory only. Restarting the server deletes all rooms.
