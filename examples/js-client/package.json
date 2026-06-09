@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "smoke": "node smoke.js",
-    "idle-timeout": "node idle-timeout.js"
+    "idle-timeout": "node idle-timeout.js",
+    "errors": "node errors.js"
   }
 }
