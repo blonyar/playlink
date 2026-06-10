@@ -71,10 +71,35 @@ curl http://localhost:7777/api/server
 Useful v0.4 host metadata environment variables:
 
 ```bash
+PLAYLINK_SERVER_ID=kangs-playlink-server
 PLAYLINK_SERVER_NAME="Kang's Playlink Server"
 PLAYLINK_TOPOLOGY=host
 PLAYLINK_PUBLIC_HTTP_URL=http://192.168.1.20:7777
 PLAYLINK_PUBLIC_WS_URL=ws://192.168.1.20:7777/ws
+```
+
+`PLAYLINK_SERVER_ID` is optional, but recommended when a host should keep a stable identity across restarts or configuration changes. When omitted, Playlink derives a deterministic fallback from the server name, topology, and bind address.
+
+Example `/api/server` response with public URL overrides:
+
+```json
+{
+  "server_id": "kangs-playlink-server",
+  "name": "Kang's Playlink Server",
+  "version": "0.1.0",
+  "topology": "host",
+  "bind_addr": "0.0.0.0:7777",
+  "websocket_path": "/ws",
+  "http_url": "http://192.168.1.20:7777",
+  "ws_url": "ws://192.168.1.20:7777/ws",
+  "public_http_url": "http://192.168.1.20:7777",
+  "public_ws_url": "ws://192.168.1.20:7777/ws",
+  "discovery": {
+    "enabled": false,
+    "method": null,
+    "port": 7778
+  }
+}
 ```
 
 LAN discovery is optional and disabled by default. To enable the UDP broadcast prototype:

@@ -60,11 +60,16 @@ pub struct DiscoveryConfig {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ServerMetadata {
+    pub server_id: String,
     pub name: String,
     pub version: &'static str,
     pub topology: Topology,
     pub bind_addr: SocketAddr,
     pub websocket_path: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ws_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_http_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,19 +96,27 @@ impl Config {
         let topology = env_parse("PLAYLINK_TOPOLOGY", Topology::Dedicated);
         let discovery_enabled = env_bool("PLAYLINK_LAN_DISCOVERY", false);
         let discovery_port = env_parse("PLAYLINK_DISCOVERY_PORT", 7778);
+        let server_name =
+            std::env::var("PLAYLINK_SERVER_NAME").unwrap_or_else(|_| "Playlink Server".to_string());
+        let server_id = std::env::var("PLAYLINK_SERVER_ID")
+            .unwrap_or_else(|_| format!("playlink:{server_name}:{topology}:{bind_addr}"));
+        let public_http_url = optional_env("PLAYLINK_PUBLIC_HTTP_URL");
+        let public_ws_url = optional_env("PLAYLINK_PUBLIC_WS_URL");
 
         Self {
             bind_addr,
             mode: std::env::var("PLAYLINK_MODE").unwrap_or_else(|_| "dev".to_string()),
             server: ServerMetadata {
-                name: std::env::var("PLAYLINK_SERVER_NAME")
-                    .unwrap_or_else(|_| "Playlink Server".to_string()),
+                server_id,
+                name: server_name,
                 version: env!("CARGO_PKG_VERSION"),
                 topology,
                 bind_addr,
                 websocket_path: "/ws",
-                public_http_url: optional_env("PLAYLINK_PUBLIC_HTTP_URL"),
-                public_ws_url: optional_env("PLAYLINK_PUBLIC_WS_URL"),
+                http_url: public_http_url.clone(),
+                ws_url: public_ws_url.clone(),
+                public_http_url,
+                public_ws_url,
                 discovery: DiscoveryConfig {
                     enabled: discovery_enabled,
                     method: discovery_enabled.then(|| "udp_broadcast".to_string()),
@@ -254,11 +267,14 @@ mod tests {
     #[test]
     fn server_metadata_serializes_expected_fields() {
         let metadata = ServerMetadata {
+            server_id: "test-server-id".to_string(),
             name: "Test Server".to_string(),
             version: "0.1.0",
             topology: Topology::Host,
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 7777)),
             websocket_path: "/ws",
+            http_url: Some("http://127.0.0.1:7777".to_string()),
+            ws_url: Some("ws://127.0.0.1:7777/ws".to_string()),
             public_http_url: Some("http://127.0.0.1:7777".to_string()),
             public_ws_url: Some("ws://127.0.0.1:7777/ws".to_string()),
             discovery: DiscoveryConfig {
@@ -269,9 +285,14 @@ mod tests {
         };
 
         let value = serde_json::to_value(metadata).unwrap();
+        assert_eq!(value["server_id"], "test-server-id");
         assert_eq!(value["name"], "Test Server");
         assert_eq!(value["topology"], "host");
         assert_eq!(value["websocket_path"], "/ws");
+        assert_eq!(value["http_url"], "http://127.0.0.1:7777");
+        assert_eq!(value["ws_url"], "ws://127.0.0.1:7777/ws");
+        assert_eq!(value["public_http_url"], "http://127.0.0.1:7777");
+        assert_eq!(value["public_ws_url"], "ws://127.0.0.1:7777/ws");
         assert_eq!(value["discovery"]["enabled"], true);
         assert_eq!(value["discovery"]["port"], 7778);
     }

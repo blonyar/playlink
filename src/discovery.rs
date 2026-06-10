@@ -22,6 +22,8 @@ pub struct DiscoveryResponse {
     #[serde(rename = "type")]
     message_type: &'static str,
     version: u8,
+    server_id: String,
+    name: String,
     server_name: String,
     topology: Topology,
     http_port: u16,
@@ -37,6 +39,8 @@ impl DiscoveryResponse {
         Self {
             message_type: DISCOVERY_RESPONSE_TYPE,
             version: DISCOVERY_VERSION,
+            server_id: metadata.server_id.clone(),
+            name: metadata.name.clone(),
             server_name: metadata.name.clone(),
             topology: metadata.topology.clone(),
             http_port: metadata.bind_addr.port(),
@@ -118,11 +122,14 @@ mod tests {
     #[test]
     fn discovery_response_serializes_connection_metadata() {
         let metadata = ServerMetadata {
+            server_id: "lan-host-id".to_string(),
             name: "LAN Host".to_string(),
             version: "0.1.0",
             topology: Topology::Host,
             bind_addr: SocketAddr::from(([0, 0, 0, 0], 7777)),
             websocket_path: "/ws",
+            http_url: None,
+            ws_url: Some("ws://192.168.1.20:7777/ws".to_string()),
             public_http_url: None,
             public_ws_url: Some("ws://192.168.1.20:7777/ws".to_string()),
             discovery: crate::DiscoveryConfig {
@@ -135,6 +142,8 @@ mod tests {
         let value = serde_json::to_value(DiscoveryResponse::from_metadata(&metadata)).unwrap();
         assert_eq!(value["type"], "playlink_discovery_response");
         assert_eq!(value["version"], 1);
+        assert_eq!(value["server_id"], "lan-host-id");
+        assert_eq!(value["name"], "LAN Host");
         assert_eq!(value["server_name"], "LAN Host");
         assert_eq!(value["topology"], "host");
         assert_eq!(value["http_port"], 7777);
