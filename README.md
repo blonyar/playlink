@@ -18,7 +18,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable room-server core with v0.4 LAN/host groundwork and a v0.5 JavaScript SDK-style example:
+Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, and v0.6 JavaScript helper documentation/stabilization:
 
 - Rust server
 - WebSocket transport
@@ -35,10 +35,11 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork a
 - server/network metadata endpoint
 - optional LAN discovery prototype
 - small JavaScript client helper
+- JavaScript helper API documentation
 - SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The current v0.5 focus is making the existing room server easy to consume from small game prototypes. See `docs/v0.5-js-sdk-example-plan.md`.
+The current v0.6 focus is stabilizing and documenting the JavaScript helper for small game prototypes. See `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -292,9 +293,10 @@ npm run idle-timeout
 4. v0.3 protocol and room reliability
 5. v0.4 LAN discovery and host-mode groundwork
 6. v0.5 JavaScript SDK-style helper and example game workflow
-7. relay mode
-8. P2P/NAT traversal experiments
-9. SDK packages and example games
+7. v0.6 JavaScript helper stabilization and API docs
+8. relay mode groundwork
+9. P2P/NAT traversal experiments
+10. SDK packages and example games
 
 ## Guardrails
 
