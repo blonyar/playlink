@@ -328,6 +328,7 @@ npm run idle-timeout
 - `docs/demo-guide.md` — runnable demos and local verification flow
 - `docs/goal.md` — long-term framework direction and work threads
 - `docs/v0.7-relay-groundwork-plan.md` — relay groundwork boundaries and next architecture plan
+- `docs/sync-models.md` — future event/state/lockstep sync model boundaries
 
 ## Roadmap
 
