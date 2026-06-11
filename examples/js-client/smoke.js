@@ -150,7 +150,15 @@ async function main() {
     throw new Error(`expected room to have 2 players, got ${JSON.stringify(roomWithTwoPlayers)}`);
   }
 
-  bob.socket.close();
+  send(bob, {
+    id: 'smoke-leave-bob',
+    type: 'leave_room',
+  });
+  const bobLeft = await waitFor(bob, 'room_left');
+  expectId(bobLeft, 'smoke-leave-bob');
+  if (bobLeft.payload.room_id !== roomId) {
+    throw new Error(`expected bob to leave ${roomId}, got ${JSON.stringify(bobLeft)}`);
+  }
   await waitFor(alice, 'player_left', (message) => message.payload.player_id === bobPlayerId);
 
   const roomsWithOnePlayer = await fetchRooms();
