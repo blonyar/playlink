@@ -7,6 +7,8 @@
     "smoke": "node smoke.js",
     "idle-timeout": "node idle-timeout.js",
     "errors": "node errors.js",
-    "discover-lan": "node discover-lan.js"
+    "discover-lan": "node discover-lan.js",
+    "sdk-demo": "node sdk-demo.js",
+    "mini-game": "node mini-game-server.js"
   }
 }

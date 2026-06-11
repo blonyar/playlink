@@ -18,7 +18,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable v0.3 room-server core:
+Playlink currently has a stable room-server core with v0.4 LAN/host groundwork and a v0.5 JavaScript SDK-style example:
 
 - Rust server
 - WebSocket transport
@@ -32,9 +32,13 @@ Playlink currently has a stable v0.3 room-server core:
 - HTTP health endpoint
 - simple admin/debug API
 - Web Debug Console
+- server/network metadata endpoint
+- optional LAN discovery prototype
+- small JavaScript client helper
+- SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The next planned stage is v0.4 LAN discovery and host-mode groundwork. See `docs/v0.4-lan-host-plan.md`.
+The current v0.5 focus is making the existing room server easy to consume from small game prototypes. See `docs/v0.5-js-sdk-example-plan.md`.
 
 ## Planned Modules
 
@@ -178,6 +182,74 @@ http://localhost:7777/
 
 The console shows health, room counts, room snapshots, and a built-in WebSocket test client for creating rooms, joining rooms, sending messages, and inspecting received events.
 
+## JavaScript SDK-style Example
+
+v0.5 includes a small reusable helper at `examples/js-client/playlink-client.js`. It wraps the existing WebSocket JSON protocol without introducing a new backend feature or package publishing step.
+
+Example usage:
+
+```js
+import { PlaylinkClient } from './playlink-client.js';
+
+const alice = new PlaylinkClient({ name: 'alice' });
+await alice.connect();
+
+const roomId = await alice.createRoom({ roomName: 'demo', maxPlayers: 4 });
+await alice.joinRoom(roomId, 'alice');
+alice.sendRoomMessage({ kind: 'move', x: 3, y: 7 });
+```
+
+Run the two-client SDK demo with the server already running:
+
+```bash
+npm --prefix examples/js-client run sdk-demo
+```
+
+The demo connects Alice and Bob, reads `/api/server`, creates and joins a room, exchanges chat/move-style room messages, verifies broadcasts, and tests leave-room behavior.
+
+For LAN use, first discover or choose the host address, then pass it through environment variables:
+
+```bash
+PLAYLINK_WS_URL=ws://192.168.1.20:7777/ws PLAYLINK_HTTP_URL=http://192.168.1.20:7777 npm --prefix examples/js-client run sdk-demo
+```
+
+## Browser Mini Game Example
+
+v0.5 also includes a tiny browser movement example that uses the same helper and room-message protocol.
+
+Start the Playlink server:
+
+```bash
+rustup run stable cargo run
+```
+
+In another terminal, serve the example page:
+
+```bash
+npm --prefix examples/js-client run mini-game
+```
+
+Open:
+
+```text
+http://127.0.0.1:7780/
+```
+
+For the fastest local demo, connect, create a room, join it, then click `Add Bot` to spawn a second local client in the same page. You can also open two browser tabs, connect both, create a room in one tab, copy the room ID into the other tab, and move with arrow keys or WASD.
+
+The local player moves with a browser animation loop, broadcasts position at about 20Hz, and interpolates remote players for smoother display. Movement is sent as room messages like:
+
+```json
+{
+  "kind": "move",
+  "player_name": "alice",
+  "x": 54,
+  "y": 50
+}
+```
+
+This is intentionally a minimal example rather than a full game engine SDK.
+
 ## Smoke Test
 
 In one terminal, start the server:
@@ -215,9 +287,10 @@ npm run idle-timeout
 3. Web debug console
 4. v0.3 protocol and room reliability
 5. v0.4 LAN discovery and host-mode groundwork
-6. relay mode
-7. P2P/NAT traversal experiments
-8. SDKs and example games
+6. v0.5 JavaScript SDK-style helper and example game workflow
+7. relay mode
+8. P2P/NAT traversal experiments
+9. SDK packages and example games
 
 ## Guardrails
 

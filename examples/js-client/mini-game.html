@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playlink Mini Game Example</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #101827;
+      color: #e5e7eb;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1, h2 {
+      margin-bottom: 8px;
+    }
+
+    .panel {
+      background: #172033;
+      border: 1px solid #2f3b52;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    label {
+      display: grid;
+      gap: 4px;
+      color: #cbd5e1;
+    }
+
+    input {
+      min-width: 220px;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: #38bdf8;
+      color: #082f49;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .arena {
+      position: relative;
+      height: 280px;
+      border: 1px solid #475569;
+      border-radius: 12px;
+      background:
+        linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+        #0f172a;
+      background-size: 28px 28px;
+      overflow: hidden;
+    }
+
+    .player {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 800;
+      transform: translate(-50%, -50%);
+      transition: left 120ms linear, top 120ms linear;
+    }
+
+    .local { background: #22c55e; color: #052e16; }
+    .remote { background: #f97316; color: #431407; }
+
+    pre {
+      min-height: 160px;
+      max-height: 260px;
+      overflow: auto;
+      padding: 12px;
+      background: #020617;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+
+    code {
+      color: #93c5fd;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Playlink Mini Game Example</h1>
+    <p>A tiny browser example that uses the v0.5 JavaScript helper and sends movement events through Playlink room broadcasts.</p>
+
+    <section class="panel">
+      <h2>Connection</h2>
+      <div class="row">
+        <label>WebSocket URL
+          <input id="wsUrl" value="ws://localhost:7777/ws">
+        </label>
+        <label>HTTP URL
+          <input id="httpUrl" value="http://localhost:7777">
+        </label>
+        <label>Player Name
+          <input id="playerName" value="player">
+        </label>
+      </div>
+      <div class="row">
+        <button id="connectButton">Connect</button>
+        <button id="createButton" disabled>Create Room</button>
+        <label>Room ID
+          <input id="roomId" placeholder="create or paste a room id">
+        </label>
+        <button id="joinButton" disabled>Join Room</button>
+        <button id="botButton" disabled>Add Bot</button>
+        <button id="leaveButton" disabled>Leave Room</button>
+      </div>
+      <p>Status: <code id="status">not connected</code></p>
+    </section>
+
+    <section class="panel">
+      <h2>Arena</h2>
+      <p>After joining a room, use arrow keys or WASD to move. Click Add Bot for a one-page local multiplayer check, or open another tab/device for real multi-client testing.</p>
+      <div id="arena" class="arena"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Messages</h2>
+      <pre id="log"></pre>
+    </section>
+  </main>
+
+  <script type="module" src="./mini-game.js"></script>
+</body>
+</html>
