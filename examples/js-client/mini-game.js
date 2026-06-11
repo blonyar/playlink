@@ -281,6 +281,17 @@ elements.connectButton.addEventListener('click', async () => {
 
   try {
     await client.connect();
+    client.socket.addEventListener('close', () => {
+      setConnectedUi(false);
+      setJoinedUi(false);
+      clearPlayers();
+      setStatus('disconnected');
+      log('connection closed');
+    });
+    client.socket.addEventListener('error', () => {
+      setStatus('socket error');
+      log('socket error');
+    });
     const server = await client.serverInfo();
     setConnectedUi(true);
     setStatus(`connected to ${server.name} (${server.topology})`);
@@ -294,9 +305,13 @@ elements.connectButton.addEventListener('click', async () => {
 });
 
 elements.createButton.addEventListener('click', async () => {
-  const roomId = await client.createRoom({ roomName: 'mini-game', maxPlayers: 4 });
-  elements.roomId.value = roomId;
-  log('created room', { roomId });
+  try {
+    const roomId = await client.createRoom({ roomName: 'mini-game', maxPlayers: 4 });
+    elements.roomId.value = roomId;
+    log('created room', { roomId });
+  } catch (error) {
+    log('failed to create room', { message: error.message, code: error.code });
+  }
 });
 
 elements.joinButton.addEventListener('click', async () => {
@@ -306,14 +321,18 @@ elements.joinButton.addEventListener('click', async () => {
     return;
   }
 
-  const joined = await client.joinRoom(roomId, elements.playerName.value || 'player');
-  setJoinedUi(true);
-  setStatus(`joined room ${joined.room_id}`);
-  localPosition = { x: 50, y: 50 };
-  lastLocalPositionSent = { ...localPosition };
-  renderPlayer(joined.player_id, localPosition, true);
-  publishMove(true);
-  log('joined room', joined);
+  try {
+    const joined = await client.joinRoom(roomId, elements.playerName.value || 'player');
+    setJoinedUi(true);
+    setStatus(`joined room ${joined.room_id}`);
+    localPosition = { x: 50, y: 50 };
+    lastLocalPositionSent = { ...localPosition };
+    renderPlayer(joined.player_id, localPosition, true);
+    publishMove(true);
+    log('joined room', joined);
+  } catch (error) {
+    log('failed to join room', { message: error.message, code: error.code });
+  }
 });
 
 elements.botButton.addEventListener('click', async () => {
@@ -329,11 +348,15 @@ elements.leaveButton.addEventListener('click', async () => {
     bot.client.close();
   }
 
-  await client.leaveRoom();
-  clearPlayers();
-  setJoinedUi(false);
-  setStatus('connected, not in room');
-  log('left room');
+  try {
+    await client.leaveRoom();
+    clearPlayers();
+    setJoinedUi(false);
+    setStatus('connected, not in room');
+    log('left room');
+  } catch (error) {
+    log('failed to leave room', { message: error.message, code: error.code });
+  }
 });
 
 window.addEventListener('keydown', (event) => {

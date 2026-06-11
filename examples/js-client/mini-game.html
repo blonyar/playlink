@@ -63,9 +63,15 @@
       cursor: pointer;
     }
 
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
+    .tips {
+      margin: 8px 0 0;
+      padding-left: 20px;
+      color: #cbd5e1;
+      line-height: 1.7;
+    }
+
+    button:not(:disabled):hover {
+      background: #7dd3fc;
     }
 
     .arena {
@@ -115,7 +121,12 @@
 <body>
   <main>
     <h1>Playlink Mini Game Example</h1>
-    <p>A tiny browser example that uses the v0.5 JavaScript helper and sends movement events through Playlink room broadcasts.</p>
+    <p>A tiny browser example that uses the JavaScript helper and sends movement events through Playlink room broadcasts.</p>
+    <ol class="tips">
+      <li>Start the Playlink server with <code>rustup run stable cargo run</code>.</li>
+      <li>Connect, create a room, join it, then move with WASD or arrow keys.</li>
+      <li>Click <strong>Add Bot</strong> for a one-page multiplayer check, or open another browser tab and join the same room.</li>
+    </ol>
 
     <section class="panel">
       <h2>Connection</h2>
