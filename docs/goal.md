@@ -30,6 +30,8 @@ Completed or mostly completed:
 - v0.3 protocol and room reliability
 - v0.4 host metadata and optional LAN discovery prototype
 - v0.5 JavaScript helper and example game workflow
+- v0.6 JavaScript helper stabilization and API docs
+- v0.7 relay groundwork plan
 
 Current implementation includes:
 
@@ -44,6 +46,8 @@ Current implementation includes:
 - server metadata endpoint
 - optional UDP LAN discovery
 - JavaScript helper, smoke/error/discovery scripts, SDK demo, and mini-game example
+- JavaScript client API documentation
+- relay groundwork planning document
 
 ## 4. Work Threads
 
@@ -190,18 +194,18 @@ Out of scope:
 
 ### v0.6 Acceptance Criteria
 
-- [ ] `docs/v0.6-js-sdk-stabilization-plan.md` exists.
-- [ ] `docs/js-client-api.md` documents `PlaylinkClient` constructor, methods, events, and errors.
-- [ ] JS scripts test or demonstrate `room_left` acknowledgement.
-- [ ] SDK demo still passes with two clients.
+- [x] `docs/v0.6-js-sdk-stabilization-plan.md` exists.
+- [x] `docs/js-client-api.md` documents `PlaylinkClient` constructor, methods, events, and errors.
+- [x] JS scripts test or demonstrate `room_left` acknowledgement.
+- [x] SDK demo still passes with two clients.
 - [ ] mini-game example still works manually.
-- [ ] Rust tests pass.
-- [ ] JavaScript syntax checks pass.
-- [ ] README links to the JS API document.
+- [x] Rust tests pass.
+- [x] JavaScript syntax checks pass.
+- [x] README links to the JS API document.
 
 ## 6. Medium-Term Milestone: v0.7 Relay Groundwork
 
-Relay should come after SDK stabilization.
+Relay groundwork should come after SDK stabilization. The current planning document is `docs/v0.7-relay-groundwork-plan.md`.
 
 In scope:
 

@@ -39,7 +39,7 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The current v0.6 focus is stabilizing and documenting the JavaScript helper for small game prototypes. See `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
+The current v0.7 focus is relay mode groundwork and architecture boundaries. See `docs/v0.7-relay-groundwork-plan.md`. The v0.6 JavaScript helper stabilization docs remain available at `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -294,7 +294,7 @@ npm run idle-timeout
 5. v0.4 LAN discovery and host-mode groundwork
 6. v0.5 JavaScript SDK-style helper and example game workflow
 7. v0.6 JavaScript helper stabilization and API docs
-8. relay mode groundwork
+8. v0.7 relay mode groundwork
 9. P2P/NAT traversal experiments
 10. SDK packages and example games
 
