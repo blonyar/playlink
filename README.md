@@ -331,6 +331,20 @@ npm run idle-timeout
 - `docs/relay-metadata.md` — future relay metadata design notes
 - `docs/sync-models.md` — future event/state/lockstep sync model boundaries
 
+## Project Stage Status
+
+| Stage | Status | Notes |
+| --- | --- | --- |
+| v0.1 dedicated WebSocket room server | Done | Core create/join/leave/list/broadcast loop is implemented. |
+| JavaScript test client | Done | Smoke, error, idle-timeout, and discovery scripts live in `examples/js-client`. |
+| Web Debug Console | Done | Served from `/` with room inspection and simulator workflow. |
+| v0.3 protocol and room reliability | Done | Structured errors, `room_left`, cleanup behavior, and protocol docs are in place. |
+| v0.4 LAN discovery and host-mode groundwork | Done | `/api/server`, topology metadata, public URL overrides, and optional UDP discovery exist. |
+| v0.5 SDK-style helper and examples | Done | JavaScript helper, SDK demo, and browser mini-game are available. |
+| v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
+| v0.7 relay mode groundwork | Planning | Design docs exist; no relay runtime is implemented yet. |
+| Future sync modules | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`. |
+
 ## Roadmap
 
 1. v0.1 dedicated WebSocket room server
