@@ -45,7 +45,8 @@ async function main() {
   const demoRoom = rooms.find((room) => room.id === roomId);
   requireCondition(demoRoom?.player_count === 2, `expected 2 players in room, got ${JSON.stringify(demoRoom)}`);
 
-  await bob.leaveRoom();
+  const bobLeft = await bob.leaveRoom();
+  requireCondition(bobLeft.room_id === roomId, `expected bob to leave ${roomId}, got ${JSON.stringify(bobLeft)}`);
   await alice.waitFor('player_left', (message) => message.payload.player_id === bobJoin.player_id);
 
   alice.close();
