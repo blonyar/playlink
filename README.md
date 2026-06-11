@@ -4,6 +4,40 @@ Playlink is a modular multiplayer networking framework for small games, prototyp
 
 The project starts with a small, stable core: rooms, players, sessions, WebSocket transport, JSON protocol, and a debug-friendly server API. Later versions can add LAN discovery, host mode, relay, P2P experiments, and multiple sync strategies without turning the v0.1 core into a catch-all game backend.
 
+## Try It in 5 Minutes
+
+Terminal 1 — start the server:
+
+```bash
+rustup run stable cargo run
+```
+
+Open the Web Debug Console:
+
+```text
+http://localhost:7777/
+```
+
+Terminal 2 — run the SDK-style two-client demo:
+
+```bash
+npm --prefix examples/js-client run sdk-demo
+```
+
+Optional browser mini-game demo:
+
+```bash
+npm --prefix examples/js-client run mini-game
+```
+
+Then open:
+
+```text
+http://127.0.0.1:7780/
+```
+
+For all runnable checks and demos, see `docs/demo-guide.md`.
+
 ## Scope
 
 Playlink is designed for:
@@ -286,6 +320,14 @@ Then run:
 cd examples/js-client
 npm run idle-timeout
 ```
+
+## Documentation Map
+
+- `docs/protocol.md` — WebSocket JSON protocol and error codes
+- `docs/js-client-api.md` — JavaScript helper API
+- `docs/demo-guide.md` — runnable demos and local verification flow
+- `docs/goal.md` — long-term framework direction and work threads
+- `docs/v0.7-relay-groundwork-plan.md` — relay groundwork boundaries and next architecture plan
 
 ## Roadmap
 
