@@ -40,6 +40,8 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork a
 
 The current v0.5 focus is making the existing room server easy to consume from small game prototypes. See `docs/v0.5-js-sdk-example-plan.md`.
 
+For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
+
 ## Planned Modules
 
 ```text
