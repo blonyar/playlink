@@ -63,6 +63,11 @@
       cursor: pointer;
     }
 
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .tips {
       margin: 8px 0 0;
       padding-left: 20px;
@@ -73,6 +78,30 @@
     button:not(:disabled):hover {
       background: #7dd3fc;
     }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 8px 0 12px;
+      color: #cbd5e1;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .legend-dot.local-dot { background: #22c55e; }
+    .legend-dot.remote-dot { background: #f97316; }
 
     .arena {
       position: relative;
@@ -157,6 +186,10 @@
     <section class="panel">
       <h2>Arena</h2>
       <p>After joining a room, use arrow keys or WASD to move. Click Add Bot for a one-page local multiplayer check, or open another tab/device for real multi-client testing.</p>
+      <div class="legend" aria-label="Player legend">
+        <span class="legend-item"><span class="legend-dot local-dot"></span> Local player</span>
+        <span class="legend-item"><span class="legend-dot remote-dot"></span> Remote player or bot</span>
+      </div>
       <div id="arena" class="arena"></div>
     </section>
 
