@@ -129,7 +129,7 @@ npm --prefix examples/js-client run sdk-demo
 Expected result:
 
 ```text
-Playlink v0.5 SDK example passed.
+Playlink v0.6 SDK demo passed.
 ```
 
 The helper API is documented in `docs/js-client-api.md`.
