@@ -114,8 +114,9 @@ export class PlaylinkClient {
   }
 
   async leaveRoom() {
-    this.send({ type: 'leave_room' });
+    const response = await this.request('leave_room');
     this.roomId = null;
+    return response.payload;
   }
 
   sendRoomMessage(data) {

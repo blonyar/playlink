@@ -102,6 +102,9 @@ pub enum ServerMessage {
         room_id: Uuid,
         player_id: Uuid,
     },
+    RoomLeft {
+        room_id: Uuid,
+    },
     PlayerJoined {
         player_id: Uuid,
         player_name: String,
@@ -247,6 +250,22 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(value, json!({ "id": "req-1", "type": "pong" }));
+    }
+
+    #[test]
+    fn server_message_room_left_serializes_room_id() {
+        let room_id = Uuid::new_v4();
+        let value = serde_json::to_value(ServerMessage::RoomLeft { room_id }).unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "type": "room_left",
+                "payload": {
+                    "room_id": room_id
+                }
+            })
+        );
     }
 
     #[test]

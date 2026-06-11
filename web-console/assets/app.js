@@ -301,6 +301,15 @@ function connect() {
       activateTab('messages');
       refreshRooms();
     }
+    if (message.type === 'room_left') {
+      const leftRoomId = message.payload.room_id;
+      currentRoomId = null;
+      if (selectedRoomId === leftRoomId) selectedRoomId = null;
+      renderSessionState();
+      setSocketState('connected');
+      log('left room', leftRoomId);
+      refreshRooms();
+    }
     if (['player_joined', 'player_left'].includes(message.type)) refreshRooms();
   });
 
@@ -339,13 +348,7 @@ function joinRoom(roomId) {
 
 function leaveRoom() {
   if (!currentRoomId) return;
-  const previousRoomId = currentRoomId;
   send({ type: 'leave_room' });
-  currentRoomId = null;
-  renderSessionState();
-  setSocketState(socket?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected');
-  log('left room', previousRoomId);
-  refreshRooms();
 }
 
 function sendRoomMessage() {

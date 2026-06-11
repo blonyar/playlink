@@ -229,6 +229,7 @@ async fn handle_client_message(
                 if let Some(task) = room_events_task.take() {
                     task.abort();
                 }
+                send(outgoing_tx, request_id, ServerMessage::RoomLeft { room_id })?;
             } else {
                 send(
                     outgoing_tx,

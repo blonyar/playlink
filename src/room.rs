@@ -181,6 +181,16 @@ impl RoomRegistry {
             .get(&room_id)
             .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
 
+        {
+            let state = room.state.lock().await;
+            if state.removing || !state.players.contains_key(&from) {
+                return Err(PlaylinkError::new(
+                    ErrorCode::NotInRoom,
+                    "Player is not in room",
+                ));
+            }
+        }
+
         room.publish(RoomEvent::Message { from, data });
         Ok(())
     }
@@ -398,6 +408,19 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn broadcast_rejects_sender_that_is_not_in_room() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let error = registry
+            .broadcast(room_id, Uuid::new_v4(), json!({ "move": "left" }))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::NotInRoom);
+        assert_eq!(error.message, "Player is not in room");
     }
 
     #[tokio::test]

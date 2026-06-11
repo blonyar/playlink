@@ -28,7 +28,13 @@ WebSocket endpoint:
 ws://localhost:7777/ws
 ```
 
-There are no tests yet. Once tests exist, run a single test with:
+Run all Rust tests with:
+
+```bash
+rustup run stable cargo test
+```
+
+Run a single test with:
 
 ```bash
 rustup run stable cargo test <test_name>
@@ -49,7 +55,7 @@ The v0.1 loop is:
 - ping/pong heartbeat foundation
 - simple admin/debug API
 
-Future modules may include LAN discovery, host mode, relay mode, P2P/NAT traversal, additional protocols, SDKs, and example games, but these should remain modular rather than becoming required core dependencies.
+Future modules may include LAN discovery, host mode, relay mode, P2P/NAT traversal, additional protocols, SDKs, and example games, but these should remain modular rather than becoming required core dependencies. The repository may already contain later-stage examples or prototypes; keep them optional and avoid coupling them into the core room-server loop.
 
 ## Architecture
 
