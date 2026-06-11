@@ -43,6 +43,8 @@ The current v0.7 focus is relay mode groundwork and architecture boundaries. See
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
+For runnable checks and demos, see `docs/demo-guide.md`.
+
 ## Planned Modules
 
 ```text
