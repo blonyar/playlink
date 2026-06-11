@@ -188,7 +188,7 @@ The console shows health, room counts, room snapshots, and a built-in WebSocket 
 
 The JavaScript examples expect Node.js 20 or newer for built-in `fetch` and `WebSocket` support.
 
-v0.5 includes a small reusable helper at `examples/js-client/playlink-client.js`. It wraps the existing WebSocket JSON protocol without introducing a new backend feature or package publishing step.
+v0.5 includes a small reusable helper at `examples/js-client/playlink-client.js`. It wraps the existing WebSocket JSON protocol without introducing a new backend feature or package publishing step. See `docs/js-client-api.md` for the current helper API.
 
 Example usage:
 
