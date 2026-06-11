@@ -73,10 +73,28 @@ function safePublicWebSocketUrl(url) {
   }
 }
 
+function formatLogLabel(label) {
+  const labels = {
+    received: '⬇ received',
+    sent: '⬆ sent',
+    error: '⚠ error',
+    event_lagged: '⚠ event lagged',
+    room_left: '↩ room left',
+    player_joined: '➕ player joined',
+    player_left: '➖ player left',
+    room_broadcast: '📣 room broadcast',
+    connected: '✅ connected',
+    disconnected: '⛔ disconnected',
+    connecting: '… connecting',
+    auto_ping: '↔ auto-ping',
+  };
+  return labels[label] ?? label;
+}
+
 function log(label, value = '') {
   const timestamp = new Date().toLocaleTimeString();
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-  elements.messageLog.textContent += `[${timestamp}] ${label}${text ? ` ${text}` : ''}\n`;
+  elements.messageLog.textContent += `[${timestamp}] ${formatLogLabel(label)}${text ? ` ${text}` : ''}\n`;
   elements.messageLog.scrollTop = elements.messageLog.scrollHeight;
 }
 
@@ -104,7 +122,7 @@ function startKeepalive() {
   keepaliveTimer = setInterval(() => {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'ping' }));
-      log('auto-ping');
+      log('auto_ping');
     }
   }, 10000);
   elements.keepaliveState.textContent = t('onAutoPing');
@@ -286,6 +304,18 @@ function connect() {
       const text = message.payload?.message ?? '';
       log('error', `${code}${text ? `: ${text}` : ''}`);
     }
+    if (message.type === 'event_lagged') {
+      log('event_lagged', `Skipped ${message.payload?.skipped ?? 0} room events. Refresh room state if the client fell behind.`);
+    }
+    if (message.type === 'room_broadcast') {
+      log('room_broadcast', message.payload);
+    }
+    if (message.type === 'player_joined') {
+      log('player_joined', message.payload);
+    }
+    if (message.type === 'player_left') {
+      log('player_left', message.payload);
+    }
     if (message.type === 'room_created') {
       elements.createRoomDialog.close();
       log(t('createdRoom'), message.payload.room_id);
@@ -307,7 +337,7 @@ function connect() {
       if (selectedRoomId === leftRoomId) selectedRoomId = null;
       renderSessionState();
       setSocketState('connected');
-      log('left room', leftRoomId);
+      log('room_left', leftRoomId);
       refreshRooms();
     }
     if (['player_joined', 'player_left'].includes(message.type)) refreshRooms();
