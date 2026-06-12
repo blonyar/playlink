@@ -60,6 +60,8 @@ Rooms     -> Inspect room/player state
 Simulator -> Leave Room or Disconnect
 ```
 
+The Messages tab includes Chat Sample and Move Sample buttons so you can quickly fill the room-message JSON payload before sending.
+
 The console is a development/debug tool. It is not a production admin panel.
 
 ## 4. Smoke Test
