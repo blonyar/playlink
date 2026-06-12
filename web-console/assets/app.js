@@ -2,7 +2,7 @@ const translations = {
   en: {
     appTitle: 'Web Debug Console', appSubtitle: 'Monitor the server, inspect rooms, and simulate a game client.', language: 'Language', refreshData: 'Refresh Data',
     tabOverview: 'Overview', tabRooms: 'Rooms', tabSimulator: 'Simulator', tabMessages: 'Messages', monitor: 'Monitor', serverOverview: 'Server Overview', overviewHelp: 'Read-only status for the running Playlink process.',
-    health: 'Health', version: 'Version', rooms: 'Rooms', players: 'Players', websocket: 'WebSocket', networkInfo: 'Network / Host', serverName: 'Server name', topology: 'Topology', bindAddress: 'Bind address', publicHttpUrl: 'Public HTTP URL', websocketPath: 'WebSocket path', discoveryStatus: 'LAN discovery', workflowTitle: 'Recommended workflow', workflowStep1: 'Simulator: connect and set player name.', workflowStep2: 'Rooms: create or join a room.', workflowStep3: 'Messages: send room messages and inspect events.',
+    health: 'Health', version: 'Version', rooms: 'Rooms', players: 'Players', websocket: 'WebSocket', uptime: 'Uptime', totalRoomsCreated: 'Total rooms created', totalMessages: 'Total messages', networkInfo: 'Network / Host', serverName: 'Server name', topology: 'Topology', bindAddress: 'Bind address', publicHttpUrl: 'Public HTTP URL', websocketPath: 'WebSocket path', discoveryStatus: 'LAN discovery', workflowTitle: 'Recommended workflow', workflowStep1: 'Simulator: connect and set player name.', workflowStep2: 'Rooms: create or join a room.', workflowStep3: 'Messages: send room messages and inspect events.',
     disconnectTitle: 'Why does it disconnect?', disconnectBody: 'The server closes idle WebSocket sessions after 30 seconds. This console sends an automatic ping every 10 seconds while connected, so it should stay connected unless the server stops or the network drops.',
     inspector: 'Inspector', roomInspector: 'Room Inspector', refreshRooms: 'Refresh Rooms', roomsHelp: 'Create rooms here, or join an existing room as the connected simulator client.', name: 'Name', action: 'Action', noRoomsLoaded: 'No rooms loaded.', noRooms: 'No rooms yet. Connect the simulator, then create the first room.', noRoomsFiltered: 'No rooms match the current search/filter.', join: 'Join', current: 'Current', advancedConnection: 'Advanced connection', searchRooms: 'Search rooms', roomFilter: 'Filter', filterAll: 'All', filterJoinable: 'Joinable', filterFull: 'Full',
     simulator: 'Simulator', clientSimulator: 'Client Simulator', simulatorHelp: 'This area only controls one simulated client connection and identity.', connection: 'Connection', websocketUrl: 'WebSocket URL', keepaliveStatus: 'Keepalive', connect: 'Connect', disconnect: 'Disconnect', ping: 'Ping', playerName: 'Player name', nextStepTitle: 'Next step', nextStepBody: 'After connecting, go to Rooms to create or join a room. After joining, go to Messages to send room messages.',
@@ -13,7 +13,7 @@ const translations = {
   zh: {
     appTitle: 'Web 调试控制台', appSubtitle: '监控服务状态、查看房间，并模拟一个游戏客户端。', language: '语言', refreshData: '刷新数据',
     tabOverview: '总览', tabRooms: '房间', tabSimulator: '模拟器', tabMessages: '消息', monitor: '监控', serverOverview: '服务总览', overviewHelp: '这里只展示当前 Playlink 服务的只读状态。',
-    health: '健康状态', version: '版本', rooms: '房间数', players: '玩家数', websocket: 'WebSocket', networkInfo: '网络 / 主机', serverName: '服务名称', topology: '拓扑', bindAddress: '监听地址', publicHttpUrl: '公网 HTTP 地址', websocketPath: 'WebSocket 路径', discoveryStatus: '局域网发现', workflowTitle: '推荐流程', workflowStep1: '模拟器：先连接并设置玩家名。', workflowStep2: '房间：创建或加入房间。', workflowStep3: '消息：发送房间消息并查看事件。',
+    health: '健康状态', version: '版本', rooms: '房间数', players: '玩家数', websocket: 'WebSocket', uptime: '运行时间', totalRoomsCreated: '累计创建房间', totalMessages: '累计消息', networkInfo: '网络 / 主机', serverName: '服务名称', topology: '拓扑', bindAddress: '监听地址', publicHttpUrl: '公网 HTTP 地址', websocketPath: 'WebSocket 路径', discoveryStatus: '局域网发现', workflowTitle: '推荐流程', workflowStep1: '模拟器：先连接并设置玩家名。', workflowStep2: '房间：创建或加入房间。', workflowStep3: '消息：发送房间消息并查看事件。',
     disconnectTitle: '为什么会自动断开？', disconnectBody: '服务端会在 WebSocket 空闲 30 秒后断开连接。这是当前设计，用来清理无活动客户端。控制台连接后会每 10 秒自动 ping 保活，所以除非服务停止或网络断开，一般不会自己掉线。',
     inspector: '检查器', roomInspector: '房间检查器', refreshRooms: '刷新房间', roomsHelp: '在这里创建房间，或让已连接的模拟客户端加入已有房间。', name: '名称', action: '操作', noRoomsLoaded: '还没有加载房间。', noRooms: '还没有房间。请先连接模拟器，然后创建第一个房间。', noRoomsFiltered: '没有房间符合当前搜索或筛选条件。', join: '加入', current: '当前', advancedConnection: '高级连接设置', searchRooms: '搜索房间', roomFilter: '筛选', filterAll: '全部', filterJoinable: '可加入', filterFull: '已满',
     simulator: '模拟器', clientSimulator: '客户端模拟器', simulatorHelp: '这里只负责一个模拟客户端的连接和身份。', connection: '连接', websocketUrl: 'WebSocket 地址', keepaliveStatus: '保活', connect: '连接', disconnect: '断开', ping: 'Ping', playerName: '玩家名', nextStepTitle: '下一步', nextStepBody: '连接后去“房间”创建或加入房间；加入后去“消息”发送房间消息。',
@@ -25,7 +25,7 @@ const translations = {
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
-  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
+  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverUptime: document.querySelector('#server-uptime'), totalRoomsCreated: document.querySelector('#total-rooms-created'), totalMessagesBroadcast: document.querySelector('#total-messages-broadcast'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
   roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), leaveRoomButton: document.querySelector('#leave-room-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), payloadValidation: document.querySelector('#payload-validation'), sendMessageButton: document.querySelector('#send-message-button'), sampleChatButton: document.querySelector('#sample-chat-button'), sampleMoveButton: document.querySelector('#sample-move-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
@@ -54,6 +54,15 @@ function applyLanguage() {
 function activateTab(tabName) {
   elements.tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === tabName));
   elements.panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === tabName));
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function defaultWebSocketUrl() {
@@ -210,6 +219,21 @@ async function refreshServerInfo() {
   }
 }
 
+async function refreshStats() {
+  try {
+    const response = await fetch('/api/stats');
+    const stats = await response.json();
+    elements.roomCount.textContent = String(stats.room_count);
+    elements.playerCount.textContent = String(stats.player_count);
+    elements.serverUptime.textContent = formatDuration(stats.uptime_seconds ?? 0);
+    elements.totalRoomsCreated.textContent = String(stats.total_rooms_created ?? 0);
+    elements.totalMessagesBroadcast.textContent = String(stats.total_messages_broadcast ?? 0);
+  } catch (error) {
+    elements.serverUptime.textContent = 'error';
+    log('stats error', error.message);
+  }
+}
+
 async function refreshRooms() {
   try {
     const response = await fetch('/api/rooms');
@@ -331,7 +355,7 @@ function renderRooms() {
   }));
 }
 
-async function refreshAll() { await Promise.all([refreshHealth(), refreshServerInfo(), refreshRooms()]); }
+async function refreshAll() { await Promise.all([refreshHealth(), refreshServerInfo(), refreshStats(), refreshRooms()]); }
 
 function connect() {
   if (socket) return;
@@ -373,6 +397,7 @@ function connect() {
       log(t('createdRoom'), message.payload.room_id);
       joinRoom(message.payload.room_id);
       refreshRooms();
+      refreshStats();
     }
     if (message.type === 'room_joined') {
       currentRoomId = message.payload.room_id;
@@ -382,6 +407,7 @@ function connect() {
       log(t('joinedRoom'), currentRoomId);
       activateTab('messages');
       refreshRooms();
+      refreshStats();
     }
     if (message.type === 'room_left') {
       const leftRoomId = message.payload.room_id;
@@ -391,8 +417,12 @@ function connect() {
       setSocketState('connected');
       log('room_left', leftRoomId);
       refreshRooms();
+      refreshStats();
     }
-    if (['player_joined', 'player_left'].includes(message.type)) refreshRooms();
+    if (['player_joined', 'player_left', 'room_broadcast'].includes(message.type)) {
+      refreshRooms();
+      refreshStats();
+    }
   });
 
   socket.addEventListener('close', () => {
@@ -404,6 +434,7 @@ function connect() {
     setSocketState('disconnected');
     log('disconnected');
     refreshRooms();
+    refreshStats();
   });
 
   socket.addEventListener('error', () => log('socket error'));
