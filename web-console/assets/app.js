@@ -9,6 +9,7 @@ const translations = {
     createRoom: 'Create Room', leaveRoom: 'Leave Room', roomName: 'Room name', maxPlayers: 'Max players', sendRoomMessage: 'Send Room Message', sampleChat: 'Chat Sample', sampleMove: 'Move Sample', messagePayload: 'Message payload JSON', logs: 'Logs', messageLog: 'Message Log', clear: 'Clear', messagesHelp: 'After joining a room, send room messages here and inspect sent/received events.', close: 'Close',
     sessionState: 'Session State', currentPlayer: 'Current player', currentRoom: 'Current room', roomDetail: 'Room Detail', selectedRoom: 'Selected room', playerList: 'Player List', noPlayers: 'No players.', noSelectedRoom: 'Select a room from the table to inspect players.', validJson: 'Valid JSON payload.', invalidJson: 'Invalid JSON payload:',
     off: 'off', onAutoPing: 'on, auto ping every 10s', disconnected: 'disconnected', connecting: 'connecting', connected: 'connected', notConnected: 'Connect the simulator first.', notInRoom: 'Join a room before sending room messages.', joinedRoom: 'Joined room', createdRoom: 'Created room', roomDetailUnavailable: 'Room detail unavailable',
+    messages: 'Messages', created: 'Created', roomMessages: 'Room messages', roomCreatedAt: 'Created at',
   },
   zh: {
     appTitle: 'Web 调试控制台', appSubtitle: '监控服务状态、查看房间，并模拟一个游戏客户端。', language: '语言', refreshData: '刷新数据',
@@ -20,13 +21,14 @@ const translations = {
     createRoom: '创建房间', leaveRoom: '离开房间', roomName: '房间名', maxPlayers: '最大玩家数', sendRoomMessage: '发送房间消息', sampleChat: '聊天示例', sampleMove: '移动示例', messagePayload: '消息 JSON', logs: '日志', messageLog: '消息日志', clear: '清空', messagesHelp: '加入房间后，在这里发送房间消息并查看发送/接收事件。', close: '关闭',
     sessionState: '会话状态', currentPlayer: '当前玩家', currentRoom: '当前房间', roomDetail: '房间详情', selectedRoom: '选中房间', playerList: '玩家列表', noPlayers: '暂无玩家。', noSelectedRoom: '从房间表中选择一个房间来查看玩家。', validJson: '消息 JSON 有效。', invalidJson: '消息 JSON 无效：',
     off: '关闭', onAutoPing: '开启，每 10 秒自动 ping', disconnected: '未连接', connecting: '连接中', connected: '已连接', notConnected: '请先在模拟器里连接。', notInRoom: '请先加入房间，再发送房间消息。', joinedRoom: '已加入房间', createdRoom: '已创建房间', roomDetailUnavailable: '房间详情不可用',
+    messages: '消息数', created: '创建时间', roomMessages: '房间消息数', roomCreatedAt: '创建时间',
   },
 };
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
   healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverUptime: document.querySelector('#server-uptime'), totalRoomsCreated: document.querySelector('#total-rooms-created'), totalMessagesBroadcast: document.querySelector('#total-messages-broadcast'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
-  roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
+  roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomMessages: document.querySelector('#selected-room-messages'), selectedRoomCreatedAt: document.querySelector('#selected-room-created-at'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), leaveRoomButton: document.querySelector('#leave-room-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), payloadValidation: document.querySelector('#payload-validation'), sendMessageButton: document.querySelector('#send-message-button'), sampleChatButton: document.querySelector('#sample-chat-button'), sampleMoveButton: document.querySelector('#sample-move-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
 };
@@ -256,6 +258,8 @@ async function renderSelectedRoom() {
     elements.selectedRoomId.textContent = '-';
     elements.selectedRoomName.textContent = '-';
     elements.selectedRoomCount.textContent = '-';
+    elements.selectedRoomMessages.textContent = '-';
+    elements.selectedRoomCreatedAt.textContent = '-';
     const empty = document.createElement('li');
     empty.textContent = t('noSelectedRoom');
     elements.selectedRoomPlayers.replaceChildren(empty);
@@ -276,6 +280,8 @@ async function renderSelectedRoom() {
     elements.selectedRoomId.textContent = room.id;
     elements.selectedRoomName.textContent = room.name;
     elements.selectedRoomCount.textContent = `${room.players.length} / ${room.max_players}`;
+    elements.selectedRoomMessages.textContent = String(room.message_count ?? 0);
+    elements.selectedRoomCreatedAt.textContent = formatTimestamp(room.created_at_unix_secs);
 
     if (room.players.length === 0) {
       const empty = document.createElement('li');
@@ -300,11 +306,17 @@ async function renderSelectedRoom() {
 function renderEmptyRoomTable(message) {
   const row = document.createElement('tr');
   const cell = document.createElement('td');
-  cell.colSpan = 4;
+  cell.colSpan = 6;
   cell.className = 'empty-state';
   cell.textContent = message;
   row.append(cell);
   elements.roomsBody.replaceChildren(row);
+}
+
+function formatTimestamp(unixSecs) {
+  if (!unixSecs) return '-';
+  const date = new Date(unixSecs * 1000);
+  return date.toLocaleTimeString();
 }
 
 function renderRooms() {
@@ -331,6 +343,8 @@ function renderRooms() {
     const id = document.createElement('td');
     const name = document.createElement('td');
     const players = document.createElement('td');
+    const messages = document.createElement('td');
+    const created = document.createElement('td');
     const action = document.createElement('td');
     const button = document.createElement('button');
     const isCurrent = room.id === currentRoomId;
@@ -342,6 +356,8 @@ function renderRooms() {
     id.textContent = isCurrent ? `${room.id} (${t('current')})` : room.id;
     name.textContent = room.name;
     players.textContent = `${room.player_count} / ${room.max_players}`;
+    messages.textContent = String(room.message_count ?? 0);
+    created.textContent = formatTimestamp(room.created_at_unix_secs);
     button.type = 'button';
     button.textContent = isCurrent ? t('current') : t('join');
     button.disabled = isCurrent || !!currentRoomId || isFull || !socket || socket.readyState !== WebSocket.OPEN;
@@ -350,7 +366,7 @@ function renderRooms() {
       joinRoom(room.id);
     });
     action.append(button);
-    row.append(id, name, players, action);
+    row.append(id, name, players, messages, created, action);
     return row;
   }));
 }
