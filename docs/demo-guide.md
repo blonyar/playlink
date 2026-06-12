@@ -40,7 +40,10 @@ Quick HTTP checks:
 curl http://localhost:7777/health
 curl http://localhost:7777/api/rooms
 curl http://localhost:7777/api/server
+curl http://localhost:7777/api/stats
 ```
+
+`/api/stats` returns server uptime, active room and player counts, and cumulative counters for rooms created and messages broadcast since startup.
 
 ## 3. Web Debug Console
 

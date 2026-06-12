@@ -52,7 +52,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, and v0.6 JavaScript helper documentation/stabilization:
+Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, v0.6 JavaScript helper documentation/stabilization, v0.7 relay groundwork design, and v0.8 observability:
 
 - Rust server
 - WebSocket transport
@@ -65,7 +65,9 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - idle disconnect cleanup
 - HTTP health endpoint
 - simple admin/debug API
-- Web Debug Console
+- server stats endpoint (`/api/stats`)
+- room `message_count` and `created_at_unix_secs` metadata
+- Web Debug Console with stats dashboard
 - server/network metadata endpoint
 - optional LAN discovery prototype
 - small JavaScript client helper
@@ -73,7 +75,7 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The current v0.7 focus is relay mode groundwork and architecture boundaries. See `docs/v0.7-relay-groundwork-plan.md`. The v0.6 JavaScript helper stabilization docs remain available at `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
+The current v0.8 focus is observability and room stats. See `docs/v0.8-observability-plan.md`. The v0.7 relay groundwork is complete at `docs/v0.7-relay-groundwork-plan.md`. The v0.6 JavaScript helper stabilization docs remain available at `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -110,6 +112,34 @@ Server/network metadata:
 ```bash
 curl http://localhost:7777/api/server
 ```
+
+Server stats:
+
+```bash
+curl http://localhost:7777/api/stats
+```
+
+Example `/api/stats` response:
+
+```json
+{
+  "uptime_seconds": 120,
+  "room_count": 2,
+  "player_count": 5,
+  "total_rooms_created": 12,
+  "total_messages_broadcast": 84
+}
+```
+
+Field notes:
+
+| Field | Meaning |
+| --- | --- |
+| `uptime_seconds` | Seconds since this Playlink process started. |
+| `room_count` | Current active rooms. |
+| `player_count` | Current active players across rooms. |
+| `total_rooms_created` | Rooms created since process start. |
+| `total_messages_broadcast` | Room messages broadcast since process start. |
 
 Useful v0.4 host metadata environment variables:
 
@@ -342,7 +372,8 @@ npm run idle-timeout
 | v0.4 LAN discovery and host-mode groundwork | Done | `/api/server`, topology metadata, public URL overrides, and optional UDP discovery exist. |
 | v0.5 SDK-style helper and examples | Done | JavaScript helper, SDK demo, and browser mini-game are available. |
 | v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
-| v0.7 relay mode groundwork | Planning | Design docs exist; no relay runtime is implemented yet. |
+| v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
+| v0.8 observability and room stats | In Progress | `/api/stats`, room `message_count`/`created_at`, and Web Console display are implemented. |
 | Future sync modules | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`. |
 
 ## Roadmap
@@ -355,8 +386,9 @@ npm run idle-timeout
 6. v0.5 JavaScript SDK-style helper and example game workflow
 7. v0.6 JavaScript helper stabilization and API docs
 8. v0.7 relay mode groundwork
-9. P2P/NAT traversal experiments
-10. SDK packages and example games
+9. v0.8 observability and room stats
+10. P2P/NAT traversal experiments
+11. SDK packages and example games
 
 ## Guardrails
 

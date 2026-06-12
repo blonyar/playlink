@@ -32,6 +32,7 @@ Completed or mostly completed:
 - v0.5 JavaScript helper and example game workflow
 - v0.6 JavaScript helper stabilization and API docs
 - v0.7 relay groundwork plan
+- v0.8 observability and room stats
 
 Current implementation includes:
 
@@ -42,8 +43,10 @@ Current implementation includes:
 - structured errors
 - `room_left` acknowledgement
 - player sessions and idle cleanup
-- Web Debug Console
+- Web Debug Console with server stats dashboard
 - server metadata endpoint
+- server stats endpoint (`/api/stats`) with uptime, room/player counts, and cumulative counters
+- room snapshots with `created_at_unix_secs` and `message_count`
 - optional UDP LAN discovery
 - JavaScript helper, smoke/error/discovery scripts, SDK demo, and mini-game example
 - JavaScript client API documentation
@@ -161,47 +164,48 @@ Rules:
 - Update checklists when work is completed.
 - Keep README aligned with implemented behavior.
 
-## 5. Near-Term Milestone: v0.6 SDK Stabilization
+## 5. Near-Term Milestone: v0.8 Observability
 
-Recommended next milestone: stabilize the JavaScript helper and example workflow before relay/P2P.
+v0.8 adds a lightweight observability vertical slice so the room server is easier to inspect.
 
 Why:
 
-- v0.5 already introduced the helper and mini-game.
-- SDK usability will reveal protocol gaps while the system is still small.
-- Relay/P2P will be easier if the client lifecycle API is already clear.
+- v0.6 already stabilized the JS helper and API docs.
+- v0.7 defined relay groundwork boundaries.
+- Stats make the current room server easier to debug for small multiplayer prototypes.
 
-### v0.6 Scope
+### v0.8 Scope
 
 In scope:
 
-- Document the `PlaylinkClient` API.
-- Add lightweight helper methods for common lifecycle operations.
-- Strengthen request timeout and close behavior.
-- Add integration coverage for `room_left`.
-- Add a minimal SDK API reference in docs.
-- Keep Node/browser compatibility documented.
-- Improve example scripts without packaging to npm yet.
+- In-memory server stats (`uptime_seconds`, `room_count`, `player_count`, `total_rooms_created`, `total_messages_broadcast`).
+- `GET /api/stats` endpoint.
+- Per-room `created_at_unix_secs` and `message_count`.
+- Web Console displays stats and per-room metadata.
+- JavaScript smoke test verifies stats behavior.
+- README and demo docs mention the stats endpoint.
 
 Out of scope:
 
-- npm publishing
-- authentication
-- matchmaking
-- relay mode
+- Prometheus/OpenTelemetry integration
+- metrics persistence
+- historical charts
+- relay runtime
 - P2P/NAT traversal
-- game-engine-specific SDKs
 
-### v0.6 Acceptance Criteria
+### v0.8 Acceptance Criteria
 
-- [x] `docs/v0.6-js-sdk-stabilization-plan.md` exists.
-- [x] `docs/js-client-api.md` documents `PlaylinkClient` constructor, methods, events, and errors.
-- [x] JS scripts test or demonstrate `room_left` acknowledgement.
-- [x] SDK demo still passes with two clients.
-- [ ] mini-game example still works manually.
-- [x] Rust tests pass.
-- [x] JavaScript syntax checks pass.
-- [x] README links to the JS API document.
+- [x] `docs/v0.8-observability-plan.md` exists.
+- [x] `GET /api/stats` returns uptime, active room count, active player count, total rooms created, and total messages broadcast.
+- [x] Room snapshots include `created_at_unix_secs` and `message_count`.
+- [x] Room details include `created_at_unix_secs` and `message_count`.
+- [x] Web Console displays server stats.
+- [x] Web Console displays room message counts or creation metadata.
+- [x] JavaScript smoke or SDK demo verifies stats behavior.
+- [x] README and demo docs mention the stats endpoint.
+- [ ] Rust checks/tests pass.
+- [ ] JavaScript syntax checks pass.
+- [ ] Server-backed smoke/errors/sdk-demo pass.
 
 ## 6. Medium-Term Milestone: v0.7 Relay Groundwork
 
@@ -232,9 +236,10 @@ Potential sequence:
 
 1. v0.6 JS SDK stabilization
 2. v0.7 relay groundwork design
-3. v0.8 lightweight state sync module prototype
-4. v0.9 additional SDK or engine integration experiment
-5. v1.0 stable room server + JS SDK + debug console baseline
+3. v0.8 observability and room stats
+4. v0.9 lightweight state sync module prototype
+5. v0.10 additional SDK or engine integration experiment
+6. v1.0 stable room server + JS SDK + debug console baseline
 
 The order can change, but each milestone should keep the core room loop intact.
 
