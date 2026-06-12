@@ -5,7 +5,11 @@ mod room;
 mod session;
 mod websocket;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use axum::{http::HeaderValue, routing::get, Router};
 use room::{RoomRegistry, RoomRegistryConfig};
@@ -21,6 +25,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub struct AppState {
     rooms: Arc<RoomRegistry>,
     config: Arc<Config>,
+    started_at: Instant,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -203,12 +208,14 @@ async fn main() {
     let state = AppState {
         rooms,
         config: config.clone(),
+        started_at: Instant::now(),
     };
     let web_console_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web-console");
 
     let app = Router::new()
         .route("/health", get(admin::health))
         .route("/api/server", get(admin::server_info))
+        .route("/api/stats", get(admin::stats))
         .route("/api/rooms", get(admin::list_rooms))
         .route("/api/rooms/:room_id", get(admin::get_room))
         .route("/ws", get(websocket::connect))
