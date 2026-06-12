@@ -10,6 +10,7 @@ use tokio::{
     sync::{broadcast, mpsc},
     time::timeout,
 };
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -28,98 +29,113 @@ pub async fn connect(ws: WebSocketUpgrade, State(state): State<AppState>) -> imp
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
-    let (mut sender, mut receiver) = socket.split();
-    let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<String>(OUTGOING_QUEUE_SIZE);
-    let (close_tx, mut close_rx) = mpsc::channel::<()>(1);
-    let mut session = Session::default();
-    let mut room_events_task: Option<tokio::task::JoinHandle<()>> = None;
+    let connection_id = Uuid::new_v4();
+    let span = tracing::info_span!("ws_connection", %connection_id);
 
-    let sender_task = tokio::spawn(async move {
-        while let Some(text) = outgoing_rx.recv().await {
-            if sender.send(Message::Text(text)).await.is_err() {
-                break;
-            }
-        }
-    });
-    let idle_timeout = state.config.session_idle_timeout;
+    async {
+        let (mut sender, mut receiver) = socket.split();
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<String>(OUTGOING_QUEUE_SIZE);
+        let (close_tx, mut close_rx) = mpsc::channel::<()>(1);
+        let mut session = Session::default();
+        let mut room_events_task: Option<tokio::task::JoinHandle<()>> = None;
 
-    loop {
-        let next_message = tokio::select! {
-            _ = close_rx.recv() => break,
-            next_message = timeout(idle_timeout, receiver.next()) => {
-                let Ok(next_message) = next_message else {
-                    break;
-                };
-                next_message
-            }
-        };
+        tracing::info!(player_id = %session.player_id, "websocket connected");
 
-        let Some(Ok(message)) = next_message else {
-            break;
-        };
-
-        let Message::Text(text) = message else {
-            continue;
-        };
-
-        if text.len() > state.config.max_message_bytes {
-            let request_id = extract_request_id(&text);
-            if send(
-                &outgoing_tx,
-                request_id,
-                ServerMessage::error(ErrorCode::MessageTooLarge, "Message is too large"),
-            )
-            .is_err()
-            {
-                break;
-            }
-            continue;
-        }
-
-        match serde_json::from_str::<ClientEnvelope>(&text) {
-            Ok(envelope) => {
-                if handle_client_message(
-                    envelope.id,
-                    envelope.message,
-                    &state,
-                    &mut session,
-                    &outgoing_tx,
-                    &close_tx,
-                    &mut room_events_task,
-                )
-                .await
-                .is_err()
-                {
+        let sender_task = tokio::spawn(async move {
+            while let Some(text) = outgoing_rx.recv().await {
+                if sender.send(Message::Text(text)).await.is_err() {
                     break;
                 }
             }
-            Err(error) => {
+            // Send a Close frame after the outgoing queue is drained
+            let _ = sender.send(Message::Close(None)).await;
+        });
+        let idle_timeout = state.config.session_idle_timeout;
+
+        let close_reason = loop {
+            let next_message = tokio::select! {
+                _ = close_rx.recv() => break "client_close",
+                next_message = timeout(idle_timeout, receiver.next()) => {
+                    let Ok(next_message) = next_message else {
+                        break "idle_timeout";
+                    };
+                    next_message
+                }
+            };
+
+            let Some(Ok(message)) = next_message else {
+                break "disconnect";
+            };
+
+            let Message::Text(text) = message else {
+                continue;
+            };
+
+            if text.len() > state.config.max_message_bytes {
                 let request_id = extract_request_id(&text);
                 if send(
                     &outgoing_tx,
                     request_id,
-                    ServerMessage::error(
-                        ErrorCode::InvalidMessage,
-                        format!("Invalid message: {error}"),
-                    ),
+                    ServerMessage::error(ErrorCode::MessageTooLarge, "Message is too large"),
                 )
                 .is_err()
                 {
-                    break;
+                    break "send_error";
+                }
+                continue;
+            }
+
+            match serde_json::from_str::<ClientEnvelope>(&text) {
+                Ok(envelope) => {
+                    if handle_client_message(
+                        envelope.id,
+                        envelope.message,
+                        &state,
+                        &mut session,
+                        &outgoing_tx,
+                        &close_tx,
+                        &mut room_events_task,
+                    )
+                    .await
+                    .is_err()
+                    {
+                        break "send_error";
+                    }
+                }
+                Err(error) => {
+                    let request_id = extract_request_id(&text);
+                    if send(
+                        &outgoing_tx,
+                        request_id,
+                        ServerMessage::error(
+                            ErrorCode::InvalidMessage,
+                            format!("Invalid message: {error}"),
+                        ),
+                    )
+                    .is_err()
+                    {
+                        break "send_error";
+                    }
                 }
             }
+        };
+
+        if let Some(room_id) = session.room_id {
+            state.rooms.leave_room(room_id, session.player_id).await;
         }
-    }
 
-    if let Some(room_id) = session.room_id {
-        state.rooms.leave_room(room_id, session.player_id).await;
-    }
+        if let Some(task) = room_events_task {
+            task.abort();
+        }
 
-    if let Some(task) = room_events_task {
-        task.abort();
-    }
+        // Drop outgoing_tx so sender_task drains and sends Close frame
+        drop(outgoing_tx);
+        let _ = sender_task.await;
 
-    sender_task.abort();
+        tracing::info!(player_id = %session.player_id, close_reason, "websocket disconnected");
+    }
+    .instrument(span)
+    .await
 }
 
 async fn handle_client_message(

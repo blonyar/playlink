@@ -175,21 +175,21 @@ impl RoomRegistry {
 
     pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
         let should_remove = if let Some(room) = self.rooms.get(&room_id) {
-            let removed = {
+            let (player_removed, room_empty) = {
                 let mut state = room.state.lock().await;
-                let removed = state.players.remove(&player_id).is_some();
-                let is_empty = state.players.is_empty();
-                if is_empty {
+                let player_removed = state.players.remove(&player_id).is_some();
+                let room_empty = state.players.is_empty();
+                if room_empty {
                     state.removing = true;
                 }
-                (removed, is_empty)
+                (player_removed, room_empty)
             };
 
-            if removed.0 {
+            if player_removed {
                 room.publish(RoomEvent::PlayerLeft { player_id });
             }
 
-            removed.1
+            room_empty
         } else {
             false
         };
@@ -273,10 +273,10 @@ impl RoomRegistry {
     }
 
     pub async fn stats(&self) -> RoomRegistryStats {
-        let rooms: Vec<_> = self.rooms.iter().map(|room| room.state.clone()).collect();
         let mut player_count = 0;
-        for state in rooms {
-            player_count += state.lock().await.players.len();
+        for entry in self.rooms.iter() {
+            let state = entry.value().state.lock().await;
+            player_count += state.players.len();
         }
 
         RoomRegistryStats {

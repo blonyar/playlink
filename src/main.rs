@@ -11,7 +11,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{http::HeaderValue, routing::get, Router};
+use axum::{
+    http::{HeaderValue, Method},
+    routing::get,
+    Router,
+};
 use room::{RoomRegistry, RoomRegistryConfig};
 use serde::Serialize;
 use tower_http::{
@@ -234,10 +238,43 @@ async fn main() {
         .await
         .expect("failed to bind server socket");
 
-    axum::serve(listener, app).await.expect("server failed");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .expect("server failed");
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("received Ctrl+C, shutting down"),
+        _ = terminate => tracing::info!("received terminate signal, shutting down"),
+    }
 }
 
 fn cors_layer(config: &Config) -> CorsLayer {
+    let allowed_methods = [Method::GET, Method::POST, Method::OPTIONS];
+    let allowed_headers = [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::AUTHORIZATION,
+    ];
+
     if config.mode == "prod" {
         let origins: Vec<HeaderValue> = config
             .allowed_origins
@@ -249,9 +286,15 @@ fn cors_layer(config: &Config) -> CorsLayer {
             tracing::warn!("PLAYLINK_MODE=prod but PLAYLINK_ALLOWED_ORIGINS is empty; no origins will be allowed");
         }
 
-        CorsLayer::new().allow_origin(origins)
+        CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
     } else {
-        CorsLayer::new().allow_origin(Any)
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
     }
 }
 

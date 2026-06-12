@@ -23,7 +23,6 @@ pub struct DiscoveryResponse {
     message_type: &'static str,
     version: u8,
     server_id: String,
-    name: String,
     server_name: String,
     topology: Topology,
     http_port: u16,
@@ -40,7 +39,6 @@ impl DiscoveryResponse {
             message_type: DISCOVERY_RESPONSE_TYPE,
             version: DISCOVERY_VERSION,
             server_id: metadata.server_id.clone(),
-            name: metadata.name.clone(),
             server_name: metadata.name.clone(),
             topology: metadata.topology.clone(),
             http_port: metadata.bind_addr.port(),
@@ -143,7 +141,6 @@ mod tests {
         assert_eq!(value["type"], "playlink_discovery_response");
         assert_eq!(value["version"], 1);
         assert_eq!(value["server_id"], "lan-host-id");
-        assert_eq!(value["name"], "LAN Host");
         assert_eq!(value["server_name"], "LAN Host");
         assert_eq!(value["topology"], "host");
         assert_eq!(value["http_port"], 7777);
