@@ -11,6 +11,9 @@ const elements = {
   botButton: document.querySelector('#botButton'),
   leaveButton: document.querySelector('#leaveButton'),
   status: document.querySelector('#status'),
+  currentRoom: document.querySelector('#currentRoom'),
+  currentPlayer: document.querySelector('#currentPlayer'),
+  botCount: document.querySelector('#botCount'),
   arena: document.querySelector('#arena'),
   log: document.querySelector('#log'),
 };
@@ -48,6 +51,12 @@ function setConnectedUi(isConnected) {
 function setJoinedUi(isJoined) {
   elements.botButton.disabled = !isJoined;
   elements.leaveButton.disabled = !isJoined;
+}
+
+function renderSessionSummary() {
+  elements.currentRoom.textContent = client?.roomId ?? '-';
+  elements.currentPlayer.textContent = client?.playerId ?? '-';
+  elements.botCount.textContent = String(bots.length);
 }
 
 function playerLabel(playerId) {
@@ -175,6 +184,7 @@ async function createBot() {
     bot.playerId = joined.player_id;
     installClientHandlers(bot.client, { isPrimary: false });
     bots.push(bot);
+    renderSessionSummary();
 
     bot.client.sendRoomMessage({
       kind: 'move',
@@ -284,7 +294,11 @@ elements.connectButton.addEventListener('click', async () => {
     client.socket.addEventListener('close', () => {
       setConnectedUi(false);
       setJoinedUi(false);
+      for (const bot of bots.splice(0)) {
+        bot.client.close();
+      }
       clearPlayers();
+      renderSessionSummary();
       setStatus('disconnected');
       log('connection closed');
     });
@@ -294,11 +308,13 @@ elements.connectButton.addEventListener('click', async () => {
     });
     const server = await client.serverInfo();
     setConnectedUi(true);
+    renderSessionSummary();
     setStatus(`connected to ${server.name} (${server.topology})`);
     log('server info', server);
   } catch (error) {
     client.close();
     client = null;
+    renderSessionSummary();
     setStatus('connection failed');
     log('connection failed', { message: error.message });
   }
@@ -324,6 +340,7 @@ elements.joinButton.addEventListener('click', async () => {
   try {
     const joined = await client.joinRoom(roomId, elements.playerName.value || 'player');
     setJoinedUi(true);
+    renderSessionSummary();
     setStatus(`joined room ${joined.room_id}`);
     localPosition = { x: 50, y: 50 };
     lastLocalPositionSent = { ...localPosition };
@@ -347,10 +364,12 @@ elements.leaveButton.addEventListener('click', async () => {
   for (const bot of bots.splice(0)) {
     bot.client.close();
   }
+  renderSessionSummary();
 
   try {
     await client.leaveRoom();
     clearPlayers();
+    renderSessionSummary();
     setJoinedUi(false);
     setStatus('connected, not in room');
     log('left room');
@@ -358,6 +377,8 @@ elements.leaveButton.addEventListener('click', async () => {
     log('failed to leave room', { message: error.message, code: error.code });
   }
 });
+
+renderSessionSummary();
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();

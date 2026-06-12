@@ -79,6 +79,28 @@
       background: #7dd3fc;
     }
 
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .stat {
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f172a;
+      color: #cbd5e1;
+      overflow-wrap: anywhere;
+    }
+
+    .stat strong {
+      display: block;
+      color: #e5e7eb;
+      margin-top: 4px;
+    }
+
     .legend {
       display: flex;
       flex-wrap: wrap;
@@ -132,6 +154,12 @@
     .local { background: #22c55e; color: #052e16; }
     .remote { background: #f97316; color: #431407; }
 
+    @media (max-width: 760px) {
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+
     pre {
       min-height: 160px;
       max-height: 260px;
@@ -181,6 +209,11 @@
         <button id="leaveButton" disabled>Leave Room</button>
       </div>
       <p>Status: <code id="status">not connected</code></p>
+      <div class="stats" aria-label="Current session summary">
+        <div class="stat">Room<strong id="currentRoom">-</strong></div>
+        <div class="stat">Player<strong id="currentPlayer">-</strong></div>
+        <div class="stat">Bots<strong id="botCount">0</strong></div>
+      </div>
     </section>
 
     <section class="panel">
