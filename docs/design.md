@@ -73,10 +73,10 @@ Room / Session / Sync Core
 Admin API / Debug Console / Logs
 ```
 
-Current v0.1 implementation uses:
+Current implementation uses:
 
 ```text
-JSON protocol + WebSocket transport + dedicated room server + in-memory room state
+JSON protocol + WebSocket transport + dedicated/host metadata + in-memory room state + optional LAN discovery prototype + JS examples
 ```
 
 Future modules should be added behind clear boundaries:
@@ -98,25 +98,26 @@ The current repository is still a simple single-crate Rust server. Split into cr
 ## 6. Current Code Structure
 
 ```text
-src/main.rs        Axum app setup, shared state, routes, server bind
+src/main.rs        Axum app setup, shared state, routes, server bind, config
 src/protocol.rs    JSON client/server message enums
 src/room.rs        in-memory room registry, players, room snapshots, broadcasts
 src/session.rs     per-connection player/session state
 src/websocket.rs   WebSocket connection loop and message handling
-src/admin.rs       health and room inspection endpoints
+src/admin.rs       health, server metadata, and room inspection endpoints
+src/discovery.rs   optional UDP LAN discovery prototype
 ```
 
 Shared application state is currently:
 
 ```text
-AppState -> Arc<RoomRegistry>
+AppState -> Arc<RoomRegistry> + Arc<Config>
 ```
 
 Room state is in-memory only. This is intentional for v0.1 because room behavior and API shape should stabilize before adding persistence.
 
 ## 7. Networking Modes
 
-### v0.1 Dedicated Server
+### Completed: v0.1 Dedicated Server
 
 ```text
 Client A ─┐
@@ -126,27 +127,23 @@ Client C ─┘
 
 Default first mode. It is stable, easy to debug, and works well with WebSocket.
 
-### v0.2 LAN Discovery
+### Completed: v0.4 LAN Discovery and Host Metadata
 
-Clients discover a server on the same LAN instead of manually typing an IP.
+Clients can inspect or discover a server on the same LAN instead of manually typing every connection detail.
 
-Possible mechanisms:
+Implemented groundwork:
 
-- UDP broadcast
+- `/api/server` exposes server identity, topology, bind address, WebSocket path, public URL overrides, and discovery config.
+- `PLAYLINK_TOPOLOGY=dedicated|host` describes how the server is being used without changing the room protocol.
+- Optional UDP broadcast discovery can advertise enough metadata for clients to connect to `/ws`.
+
+Possible future discovery mechanisms:
+
 - mDNS
 - local registry endpoint
+- platform-specific LAN browser integrations
 
-### v0.3 Host Mode
-
-One player runs the server locally and other players connect to that host.
-
-Useful for:
-
-- LAN parties
-- local friend groups
-- games that do not need a deployed server
-
-### v0.4 Relay Mode
+### Future: Relay Mode
 
 Players connect through a relay when direct connections are not possible.
 
@@ -157,7 +154,7 @@ Useful for:
 - failed P2P attempts
 - simple cross-network play
 
-### v0.5 P2P / NAT Traversal
+### Future: P2P / NAT Traversal
 
 P2P should be optional and experimental, not the default architecture.
 

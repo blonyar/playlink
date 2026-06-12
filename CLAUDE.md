@@ -28,7 +28,13 @@ WebSocket endpoint:
 ws://localhost:7777/ws
 ```
 
-There are no tests yet. Once tests exist, run a single test with:
+Run all Rust tests with:
+
+```bash
+rustup run stable cargo test
+```
+
+Run a single test with:
 
 ```bash
 rustup run stable cargo test <test_name>
@@ -49,14 +55,16 @@ The v0.1 loop is:
 - ping/pong heartbeat foundation
 - simple admin/debug API
 
-Future modules may include LAN discovery, host mode, relay mode, P2P/NAT traversal, additional protocols, SDKs, and example games, but these should remain modular rather than becoming required core dependencies.
+Future modules may include LAN discovery, host mode, relay mode, P2P/NAT traversal, additional protocols, SDKs, and example games, but these should remain modular rather than becoming required core dependencies. The repository may already contain later-stage examples or prototypes; keep them optional and avoid coupling them into the core room-server loop.
 
 ## Architecture
 
-`src/main.rs` wires the Axum application. Shared state is `AppState`, currently an `Arc<RoomRegistry>`, and routes are mounted for:
+`src/main.rs` wires the Axum application. Shared state is `AppState`, currently an `Arc<RoomRegistry>` plus `Arc<Config>`, and routes are mounted for:
 
 - `GET /health`
+- `GET /api/server`
 - `GET /api/rooms`
+- `GET /api/rooms/:room_id`
 - `GET /ws`
 
 `src/protocol.rs` defines the JSON wire protocol via tagged Serde enums:
@@ -70,7 +78,9 @@ Future modules may include LAN discovery, host mode, relay mode, P2P/NAT travers
 
 `src/websocket.rs` handles WebSocket connections. Each connection splits inbound/outbound handling, keeps a `Session`, subscribes to room broadcasts after joining, and removes the player from the room on disconnect.
 
-`src/admin.rs` contains simple HTTP JSON endpoints for health and room inspection.
+`src/admin.rs` contains simple HTTP JSON endpoints for health, server metadata, and room inspection.
+
+`src/discovery.rs` contains the optional UDP LAN discovery prototype. It is disabled by default and should remain isolated from room/session core logic.
 
 ## Design Guardrails
 

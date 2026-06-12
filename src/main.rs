@@ -1,12 +1,21 @@
 mod admin;
+mod discovery;
 mod protocol;
 mod room;
 mod session;
 mod websocket;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use axum::{http::HeaderValue, routing::get, Router};
+use axum::{
+    http::{HeaderValue, Method},
+    routing::get,
+    Router,
+};
 use room::{RoomRegistry, RoomRegistryConfig};
 use serde::Serialize;
 use tower_http::{
@@ -20,6 +29,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub struct AppState {
     rooms: Arc<RoomRegistry>,
     config: Arc<Config>,
+    started_at: Instant,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -59,11 +69,16 @@ pub struct DiscoveryConfig {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ServerMetadata {
+    pub server_id: String,
     pub name: String,
     pub version: &'static str,
     pub topology: Topology,
     pub bind_addr: SocketAddr,
     pub websocket_path: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ws_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_http_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,19 +105,27 @@ impl Config {
         let topology = env_parse("PLAYLINK_TOPOLOGY", Topology::Dedicated);
         let discovery_enabled = env_bool("PLAYLINK_LAN_DISCOVERY", false);
         let discovery_port = env_parse("PLAYLINK_DISCOVERY_PORT", 7778);
+        let server_name =
+            std::env::var("PLAYLINK_SERVER_NAME").unwrap_or_else(|_| "Playlink Server".to_string());
+        let server_id = std::env::var("PLAYLINK_SERVER_ID")
+            .unwrap_or_else(|_| format!("playlink:{server_name}:{topology}:{bind_addr}"));
+        let public_http_url = optional_env("PLAYLINK_PUBLIC_HTTP_URL");
+        let public_ws_url = optional_env("PLAYLINK_PUBLIC_WS_URL");
 
         Self {
             bind_addr,
             mode: std::env::var("PLAYLINK_MODE").unwrap_or_else(|_| "dev".to_string()),
             server: ServerMetadata {
-                name: std::env::var("PLAYLINK_SERVER_NAME")
-                    .unwrap_or_else(|_| "Playlink Server".to_string()),
+                server_id,
+                name: server_name,
                 version: env!("CARGO_PKG_VERSION"),
                 topology,
                 bind_addr,
                 websocket_path: "/ws",
-                public_http_url: optional_env("PLAYLINK_PUBLIC_HTTP_URL"),
-                public_ws_url: optional_env("PLAYLINK_PUBLIC_WS_URL"),
+                http_url: public_http_url.clone(),
+                ws_url: public_ws_url.clone(),
+                public_http_url,
+                public_ws_url,
                 discovery: DiscoveryConfig {
                     enabled: discovery_enabled,
                     method: discovery_enabled.then(|| "udp_broadcast".to_string()),
@@ -171,6 +194,16 @@ async fn main() {
         .init();
 
     let config = Arc::new(Config::from_env());
+    let _discovery_task = if config.server.discovery.enabled {
+        Some(
+            discovery::spawn(config.server.clone())
+                .await
+                .expect("failed to bind LAN discovery socket"),
+        )
+    } else {
+        None
+    };
+
     let rooms = Arc::new(RoomRegistry::new(RoomRegistryConfig {
         default_max_players: config.default_max_players,
         max_players_per_room: config.max_players_per_room,
@@ -179,12 +212,14 @@ async fn main() {
     let state = AppState {
         rooms,
         config: config.clone(),
+        started_at: Instant::now(),
     };
     let web_console_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web-console");
 
     let app = Router::new()
         .route("/health", get(admin::health))
         .route("/api/server", get(admin::server_info))
+        .route("/api/stats", get(admin::stats))
         .route("/api/rooms", get(admin::list_rooms))
         .route("/api/rooms/:room_id", get(admin::get_room))
         .route("/ws", get(websocket::connect))
@@ -203,10 +238,43 @@ async fn main() {
         .await
         .expect("failed to bind server socket");
 
-    axum::serve(listener, app).await.expect("server failed");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .expect("server failed");
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("received Ctrl+C, shutting down"),
+        _ = terminate => tracing::info!("received terminate signal, shutting down"),
+    }
 }
 
 fn cors_layer(config: &Config) -> CorsLayer {
+    let allowed_methods = [Method::GET, Method::POST, Method::OPTIONS];
+    let allowed_headers = [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::AUTHORIZATION,
+    ];
+
     if config.mode == "prod" {
         let origins: Vec<HeaderValue> = config
             .allowed_origins
@@ -218,9 +286,15 @@ fn cors_layer(config: &Config) -> CorsLayer {
             tracing::warn!("PLAYLINK_MODE=prod but PLAYLINK_ALLOWED_ORIGINS is empty; no origins will be allowed");
         }
 
-        CorsLayer::new().allow_origin(origins)
+        CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
     } else {
-        CorsLayer::new().allow_origin(Any)
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(allowed_methods)
+            .allow_headers(allowed_headers)
     }
 }
 
@@ -243,11 +317,14 @@ mod tests {
     #[test]
     fn server_metadata_serializes_expected_fields() {
         let metadata = ServerMetadata {
+            server_id: "test-server-id".to_string(),
             name: "Test Server".to_string(),
             version: "0.1.0",
             topology: Topology::Host,
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 7777)),
             websocket_path: "/ws",
+            http_url: Some("http://127.0.0.1:7777".to_string()),
+            ws_url: Some("ws://127.0.0.1:7777/ws".to_string()),
             public_http_url: Some("http://127.0.0.1:7777".to_string()),
             public_ws_url: Some("ws://127.0.0.1:7777/ws".to_string()),
             discovery: DiscoveryConfig {
@@ -258,9 +335,14 @@ mod tests {
         };
 
         let value = serde_json::to_value(metadata).unwrap();
+        assert_eq!(value["server_id"], "test-server-id");
         assert_eq!(value["name"], "Test Server");
         assert_eq!(value["topology"], "host");
         assert_eq!(value["websocket_path"], "/ws");
+        assert_eq!(value["http_url"], "http://127.0.0.1:7777");
+        assert_eq!(value["ws_url"], "ws://127.0.0.1:7777/ws");
+        assert_eq!(value["public_http_url"], "http://127.0.0.1:7777");
+        assert_eq!(value["public_ws_url"], "ws://127.0.0.1:7777/ws");
         assert_eq!(value["discovery"]["enabled"], true);
         assert_eq!(value["discovery"]["port"], 7778);
     }

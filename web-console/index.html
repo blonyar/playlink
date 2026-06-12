@@ -63,6 +63,18 @@
             <span data-i18n="websocket">WebSocket</span>
             <strong id="ws-state">disconnected</strong>
           </article>
+          <article class="metric">
+            <span data-i18n="uptime">Uptime</span>
+            <strong id="server-uptime">0s</strong>
+          </article>
+          <article class="metric">
+            <span data-i18n="totalRoomsCreated">Total rooms created</span>
+            <strong id="total-rooms-created">0</strong>
+          </article>
+          <article class="metric">
+            <span data-i18n="totalMessages">Total messages</span>
+            <strong id="total-messages-broadcast">0</strong>
+          </article>
         </div>
 
         <article class="info-card">
@@ -70,16 +82,17 @@
           <p><span data-i18n="serverName">Server name</span>: <strong id="server-name">-</strong></p>
           <p><span data-i18n="topology">Topology</span>: <strong id="server-topology">-</strong></p>
           <p><span data-i18n="bindAddress">Bind address</span>: <strong id="server-bind-addr">-</strong></p>
+          <p><span data-i18n="publicHttpUrl">Public HTTP URL</span>: <strong id="server-public-http-url">-</strong></p>
           <p><span data-i18n="websocketPath">WebSocket path</span>: <strong id="server-ws-path">-</strong></p>
           <p><span data-i18n="discoveryStatus">LAN discovery</span>: <strong id="server-discovery">-</strong></p>
         </article>
 
         <article class="info-card">
           <h3 data-i18n="workflowTitle">Recommended workflow</h3>
-          <ol class="inline-flow">
-            <li data-i18n="workflowStep1">Simulator: connect and set player name.</li>
-            <li data-i18n="workflowStep2">Rooms: create or join a room.</li>
-            <li data-i18n="workflowStep3">Messages: send room messages and inspect events.</li>
+          <ol class="inline-flow workflow-steps">
+            <li id="workflow-connect" data-i18n="workflowStep1">Simulator: connect and set player name.</li>
+            <li id="workflow-room" data-i18n="workflowStep2">Rooms: create or join a room.</li>
+            <li id="workflow-message" data-i18n="workflowStep3">Messages: send room messages and inspect events.</li>
           </ol>
         </article>
 
@@ -169,11 +182,13 @@
                   <th>ID</th>
                   <th data-i18n="name">Name</th>
                   <th data-i18n="players">Players</th>
+                  <th data-i18n="messages">Messages</th>
+                  <th data-i18n="created">Created</th>
                   <th data-i18n="action">Action</th>
                 </tr>
               </thead>
               <tbody id="rooms-body">
-                <tr><td colspan="4" data-i18n="noRoomsLoaded">No rooms loaded.</td></tr>
+                <tr><td colspan="6" data-i18n="noRoomsLoaded">No rooms loaded.</td></tr>
               </tbody>
             </table>
           </div>
@@ -183,6 +198,8 @@
             <p><span data-i18n="selectedRoom">Selected room</span>: <strong id="selected-room-id">-</strong></p>
             <p><span data-i18n="name">Name</span>: <strong id="selected-room-name">-</strong></p>
             <p><span data-i18n="players">Players</span>: <strong id="selected-room-count">-</strong></p>
+            <p><span data-i18n="roomMessages">Room messages</span>: <strong id="selected-room-messages">-</strong></p>
+            <p><span data-i18n="roomCreatedAt">Created at</span>: <strong id="selected-room-created-at">-</strong></p>
             <div>
               <h4 data-i18n="playerList">Player List</h4>
               <ul id="selected-room-players" class="player-list"></ul>
@@ -203,10 +220,15 @@
         <p class="help-text" data-i18n="messagesHelp">After joining a room, send room messages here and inspect sent/received events.</p>
         <article class="card message-composer">
           <h3 data-i18n="sendRoomMessage">Send Room Message</h3>
+          <div class="button-row">
+            <button id="sample-chat-button" class="secondary" type="button" data-i18n="sampleChat">Chat Sample</button>
+            <button id="sample-move-button" class="secondary" type="button" data-i18n="sampleMove">Move Sample</button>
+          </div>
           <label>
             <span data-i18n="messagePayload">Message payload JSON</span>
             <textarea id="message-payload" rows="5">{"text":"hello from console"}</textarea>
           </label>
+          <p id="payload-validation" class="validation-message"></p>
           <button id="send-message-button" type="button" disabled data-i18n="sendRoomMessage">Send Room Message</button>
         </article>
         <pre id="message-log" class="log"></pre>

@@ -1,4 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use dashmap::DashMap;
 use serde::Serialize;
@@ -12,6 +19,8 @@ use crate::protocol::{ErrorCode, PlaylinkError, RoomEvent};
 pub struct RoomRegistry {
     rooms: DashMap<Uuid, Room>,
     config: RoomRegistryConfig,
+    total_rooms_created: AtomicU64,
+    total_messages_broadcast: AtomicU64,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +45,8 @@ pub struct Room {
     pub id: Uuid,
     pub name: String,
     pub max_players: usize,
+    pub created_at_unix_secs: u64,
+    message_count: AtomicU64,
     state: Arc<Mutex<RoomState>>,
     events: broadcast::Sender<RoomEvent>,
 }
@@ -58,6 +69,8 @@ pub struct RoomSnapshot {
     pub name: String,
     pub max_players: usize,
     pub player_count: usize,
+    pub created_at_unix_secs: u64,
+    pub message_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,7 +78,17 @@ pub struct RoomDetail {
     pub id: Uuid,
     pub name: String,
     pub max_players: usize,
+    pub created_at_unix_secs: u64,
+    pub message_count: u64,
     pub players: Vec<Player>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RoomRegistryStats {
+    pub room_count: usize,
+    pub player_count: usize,
+    pub total_rooms_created: u64,
+    pub total_messages_broadcast: u64,
 }
 
 impl RoomRegistry {
@@ -77,6 +100,8 @@ impl RoomRegistry {
                 max_players_per_room: config.max_players_per_room.max(1),
                 room_event_buffer: config.room_event_buffer.max(1),
             },
+            total_rooms_created: AtomicU64::new(0),
+            total_messages_broadcast: AtomicU64::new(0),
         }
     }
 
@@ -86,6 +111,7 @@ impl RoomRegistry {
             .unwrap_or(self.config.default_max_players)
             .clamp(1, self.config.max_players_per_room);
         let (events, _) = broadcast::channel(self.config.room_event_buffer);
+        let created_at_unix_secs = current_unix_secs();
 
         self.rooms.insert(
             id,
@@ -93,10 +119,13 @@ impl RoomRegistry {
                 id,
                 name: name.unwrap_or_else(|| "Untitled Room".to_string()),
                 max_players,
+                created_at_unix_secs,
+                message_count: AtomicU64::new(0),
                 state: Arc::new(Mutex::new(RoomState::default())),
                 events,
             },
         );
+        self.total_rooms_created.fetch_add(1, Ordering::Relaxed);
 
         id
     }
@@ -146,21 +175,21 @@ impl RoomRegistry {
 
     pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
         let should_remove = if let Some(room) = self.rooms.get(&room_id) {
-            let removed = {
+            let (player_removed, room_empty) = {
                 let mut state = room.state.lock().await;
-                let removed = state.players.remove(&player_id).is_some();
-                let is_empty = state.players.is_empty();
-                if is_empty {
+                let player_removed = state.players.remove(&player_id).is_some();
+                let room_empty = state.players.is_empty();
+                if room_empty {
                     state.removing = true;
                 }
-                (removed, is_empty)
+                (player_removed, room_empty)
             };
 
-            if removed.0 {
+            if player_removed {
                 room.publish(RoomEvent::PlayerLeft { player_id });
             }
 
-            removed.1
+            room_empty
         } else {
             false
         };
@@ -181,6 +210,19 @@ impl RoomRegistry {
             .get(&room_id)
             .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
 
+        {
+            let state = room.state.lock().await;
+            if state.removing || !state.players.contains_key(&from) {
+                return Err(PlaylinkError::new(
+                    ErrorCode::NotInRoom,
+                    "Player is not in room",
+                ));
+            }
+        }
+
+        room.message_count.fetch_add(1, Ordering::Relaxed);
+        self.total_messages_broadcast
+            .fetch_add(1, Ordering::Relaxed);
         room.publish(RoomEvent::Message { from, data });
         Ok(())
     }
@@ -194,19 +236,23 @@ impl RoomRegistry {
                     room.id,
                     room.name.clone(),
                     room.max_players,
+                    room.created_at_unix_secs,
+                    room.message_count.load(Ordering::Relaxed),
                     room.state.clone(),
                 )
             })
             .collect();
 
         let mut snapshots = Vec::with_capacity(rooms.len());
-        for (id, name, max_players, state) in rooms {
+        for (id, name, max_players, created_at_unix_secs, message_count, state) in rooms {
             let state = state.lock().await;
             snapshots.push(RoomSnapshot {
                 id,
                 name,
                 max_players,
                 player_count: state.players.len(),
+                created_at_unix_secs,
+                message_count,
             });
         }
 
@@ -220,8 +266,25 @@ impl RoomRegistry {
             id: room.id,
             name: room.name.clone(),
             max_players: room.max_players,
+            created_at_unix_secs: room.created_at_unix_secs,
+            message_count: room.message_count.load(Ordering::Relaxed),
             players: state.players.values().cloned().collect(),
         })
+    }
+
+    pub async fn stats(&self) -> RoomRegistryStats {
+        let mut player_count = 0;
+        for entry in self.rooms.iter() {
+            let state = entry.value().state.lock().await;
+            player_count += state.players.len();
+        }
+
+        RoomRegistryStats {
+            room_count: self.rooms.len(),
+            player_count,
+            total_rooms_created: self.total_rooms_created.load(Ordering::Relaxed),
+            total_messages_broadcast: self.total_messages_broadcast.load(Ordering::Relaxed),
+        }
     }
 }
 
@@ -229,6 +292,13 @@ impl Room {
     fn publish(&self, event: RoomEvent) {
         let _ = self.events.send(event);
     }
+}
+
+fn current_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -401,6 +471,77 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn broadcast_increments_room_and_registry_message_counts() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let _ = receiver.recv().await.unwrap();
+
+        registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap();
+        registry
+            .broadcast(room_id, alice_id, json!({ "move": "right" }))
+            .await
+            .unwrap();
+
+        let detail = registry.detail(room_id).await.unwrap();
+        let stats = registry.stats().await;
+
+        assert_eq!(detail.message_count, 2);
+        assert_eq!(stats.total_messages_broadcast, 2);
+    }
+
+    #[tokio::test]
+    async fn create_room_tracks_created_at_and_total_created() {
+        let registry = RoomRegistry::default();
+        let before = current_unix_secs();
+        let room_id = registry.create_room(Some("Stats".to_string()), Some(2));
+        let after = current_unix_secs();
+
+        let detail = registry.detail(room_id).await.unwrap();
+        let stats = registry.stats().await;
+
+        assert!(detail.created_at_unix_secs >= before);
+        assert!(detail.created_at_unix_secs <= after);
+        assert_eq!(detail.message_count, 0);
+        assert_eq!(stats.total_rooms_created, 1);
+        assert_eq!(stats.room_count, 1);
+    }
+
+    #[tokio::test]
+    async fn stats_include_active_room_and_player_counts() {
+        let registry = RoomRegistry::default();
+        let room_a = registry.create_room(Some("A".to_string()), Some(4));
+        let room_b = registry.create_room(Some("B".to_string()), Some(4));
+
+        registry.join_room(room_a, player("A1")).await.unwrap();
+        registry.join_room(room_a, player("A2")).await.unwrap();
+        registry.join_room(room_b, player("B1")).await.unwrap();
+
+        let stats = registry.stats().await;
+        assert_eq!(stats.room_count, 2);
+        assert_eq!(stats.player_count, 3);
+        assert_eq!(stats.total_rooms_created, 2);
+    }
+
+    #[tokio::test]
+    async fn broadcast_rejects_sender_that_is_not_in_room() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1));
+        let error = registry
+            .broadcast(room_id, Uuid::new_v4(), json!({ "move": "left" }))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::NotInRoom);
+        assert_eq!(error.message, "Player is not in room");
+    }
+
+    #[tokio::test]
     async fn snapshots_include_room_player_counts() {
         let registry = RoomRegistry::default();
         let room_a = registry.create_room(Some("A".to_string()), Some(4));
@@ -415,6 +556,8 @@ mod tests {
         let snapshot_b = snapshots.iter().find(|room| room.id == room_b).unwrap();
 
         assert_eq!(snapshot_a.player_count, 2);
+        assert_eq!(snapshot_a.message_count, 0);
+        assert!(snapshot_a.created_at_unix_secs > 0);
         assert_eq!(snapshot_b.player_count, 1);
     }
 }

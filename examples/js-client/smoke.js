@@ -74,6 +74,14 @@ async function fetchRooms() {
   return response.json();
 }
 
+async function fetchStats() {
+  const response = await fetch(`${httpBase}/api/stats`);
+  if (!response.ok) {
+    throw new Error(`stats failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 async function main() {
   const alice = await connectClient('alice');
   const bob = await connectClient('bob');
@@ -116,6 +124,15 @@ async function main() {
   const bobPlayerId = bobJoined.payload.player_id;
   await waitFor(alice, 'player_joined', (message) => message.payload.player_name === 'bob');
 
+  const statsWithTwoPlayers = await fetchStats();
+  if (statsWithTwoPlayers.room_count < 1 || statsWithTwoPlayers.player_count < 2) {
+    throw new Error(`expected stats to include active room and players, got ${JSON.stringify(statsWithTwoPlayers)}`);
+  }
+  if (statsWithTwoPlayers.total_rooms_created < 1) {
+    throw new Error(`expected total_rooms_created >= 1, got ${JSON.stringify(statsWithTwoPlayers)}`);
+  }
+  const messagesBefore = statsWithTwoPlayers.total_messages_broadcast;
+
   send(alice, {
     type: 'room_message',
     payload: {
@@ -149,14 +166,38 @@ async function main() {
   if (!roomWithTwoPlayers || roomWithTwoPlayers.player_count !== 2) {
     throw new Error(`expected room to have 2 players, got ${JSON.stringify(roomWithTwoPlayers)}`);
   }
+  if (roomWithTwoPlayers.message_count !== 2) {
+    throw new Error(`expected room message_count to be 2, got ${JSON.stringify(roomWithTwoPlayers)}`);
+  }
+  if (!roomWithTwoPlayers.created_at_unix_secs) {
+    throw new Error(`expected room created_at_unix_secs, got ${JSON.stringify(roomWithTwoPlayers)}`);
+  }
 
-  bob.socket.close();
+  const statsAfterMessages = await fetchStats();
+  if (statsAfterMessages.total_messages_broadcast < messagesBefore + 2) {
+    throw new Error(`expected total_messages_broadcast to increase by 2, got before=${messagesBefore} after=${JSON.stringify(statsAfterMessages)}`);
+  }
+
+  send(bob, {
+    id: 'smoke-leave-bob',
+    type: 'leave_room',
+  });
+  const bobLeft = await waitFor(bob, 'room_left');
+  expectId(bobLeft, 'smoke-leave-bob');
+  if (bobLeft.payload.room_id !== roomId) {
+    throw new Error(`expected bob to leave ${roomId}, got ${JSON.stringify(bobLeft)}`);
+  }
   await waitFor(alice, 'player_left', (message) => message.payload.player_id === bobPlayerId);
 
   const roomsWithOnePlayer = await fetchRooms();
   const roomWithOnePlayer = roomsWithOnePlayer.find((room) => room.id === roomId);
   if (!roomWithOnePlayer || roomWithOnePlayer.player_count !== 1) {
     throw new Error(`expected room to have 1 player, got ${JSON.stringify(roomWithOnePlayer)}`);
+  }
+
+  const statsWithOnePlayer = await fetchStats();
+  if (statsWithOnePlayer.player_count < 1) {
+    throw new Error(`expected stats to retain at least Alice, got ${JSON.stringify(statsWithOnePlayer)}`);
   }
 
   alice.socket.close();

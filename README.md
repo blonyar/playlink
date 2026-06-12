@@ -4,6 +4,40 @@ Playlink is a modular multiplayer networking framework for small games, prototyp
 
 The project starts with a small, stable core: rooms, players, sessions, WebSocket transport, JSON protocol, and a debug-friendly server API. Later versions can add LAN discovery, host mode, relay, P2P experiments, and multiple sync strategies without turning the v0.1 core into a catch-all game backend.
 
+## Try It in 5 Minutes
+
+Terminal 1 — start the server:
+
+```bash
+rustup run stable cargo run
+```
+
+Open the Web Debug Console:
+
+```text
+http://localhost:7777/
+```
+
+Terminal 2 — run the SDK-style two-client demo:
+
+```bash
+npm --prefix examples/js-client run sdk-demo
+```
+
+Optional browser mini-game demo:
+
+```bash
+npm --prefix examples/js-client run mini-game
+```
+
+Then open:
+
+```text
+http://127.0.0.1:7780/
+```
+
+For all runnable checks and demos, see `docs/demo-guide.md`.
+
 ## Scope
 
 Playlink is designed for:
@@ -18,7 +52,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable v0.3 room-server core:
+Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, v0.6 JavaScript helper documentation/stabilization, v0.7 relay groundwork design, and v0.8 observability:
 
 - Rust server
 - WebSocket transport
@@ -31,10 +65,21 @@ Playlink currently has a stable v0.3 room-server core:
 - idle disconnect cleanup
 - HTTP health endpoint
 - simple admin/debug API
-- Web Debug Console
+- server stats endpoint (`/api/stats`)
+- room `message_count` and `created_at_unix_secs` metadata
+- Web Debug Console with stats dashboard
+- server/network metadata endpoint
+- optional LAN discovery prototype
+- small JavaScript client helper
+- JavaScript helper API documentation
+- SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The next planned stage is v0.4 LAN discovery and host-mode groundwork. See `docs/v0.4-lan-host-plan.md`.
+The current v0.8 focus is observability and room stats. See `docs/v0.8-observability-plan.md`. The v0.7 relay groundwork is complete at `docs/v0.7-relay-groundwork-plan.md`. The v0.6 JavaScript helper stabilization docs remain available at `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
+
+For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
+
+For runnable checks and demos, see `docs/demo-guide.md`.
 
 ## Planned Modules
 
@@ -68,13 +113,78 @@ Server/network metadata:
 curl http://localhost:7777/api/server
 ```
 
+Server stats:
+
+```bash
+curl http://localhost:7777/api/stats
+```
+
+Example `/api/stats` response:
+
+```json
+{
+  "uptime_seconds": 120,
+  "room_count": 2,
+  "player_count": 5,
+  "total_rooms_created": 12,
+  "total_messages_broadcast": 84
+}
+```
+
+Field notes:
+
+| Field | Meaning |
+| --- | --- |
+| `uptime_seconds` | Seconds since this Playlink process started. |
+| `room_count` | Current active rooms. |
+| `player_count` | Current active players across rooms. |
+| `total_rooms_created` | Rooms created since process start. |
+| `total_messages_broadcast` | Room messages broadcast since process start. |
+
 Useful v0.4 host metadata environment variables:
 
 ```bash
+PLAYLINK_SERVER_ID=kangs-playlink-server
 PLAYLINK_SERVER_NAME="Kang's Playlink Server"
 PLAYLINK_TOPOLOGY=host
 PLAYLINK_PUBLIC_HTTP_URL=http://192.168.1.20:7777
 PLAYLINK_PUBLIC_WS_URL=ws://192.168.1.20:7777/ws
+```
+
+`PLAYLINK_SERVER_ID` is optional, but recommended when a host should keep a stable identity across restarts or configuration changes. When omitted, Playlink derives a deterministic fallback from the server name, topology, and bind address.
+
+Example `/api/server` response with public URL overrides:
+
+```json
+{
+  "server_id": "kangs-playlink-server",
+  "name": "Kang's Playlink Server",
+  "version": "0.1.0",
+  "topology": "host",
+  "bind_addr": "0.0.0.0:7777",
+  "websocket_path": "/ws",
+  "http_url": "http://192.168.1.20:7777",
+  "ws_url": "ws://192.168.1.20:7777/ws",
+  "public_http_url": "http://192.168.1.20:7777",
+  "public_ws_url": "ws://192.168.1.20:7777/ws",
+  "discovery": {
+    "enabled": false,
+    "method": null,
+    "port": 7778
+  }
+}
+```
+
+LAN discovery is optional and disabled by default. To enable the UDP broadcast prototype:
+
+```bash
+PLAYLINK_LAN_DISCOVERY=1 PLAYLINK_DISCOVERY_PORT=7778 rustup run stable cargo run
+```
+
+Then, from another terminal, run:
+
+```bash
+npm --prefix examples/js-client run discover-lan
 ```
 
 List rooms:
@@ -141,6 +251,76 @@ http://localhost:7777/
 
 The console shows health, room counts, room snapshots, and a built-in WebSocket test client for creating rooms, joining rooms, sending messages, and inspecting received events.
 
+## JavaScript SDK-style Example
+
+The JavaScript examples expect Node.js 20 or newer for built-in `fetch` and `WebSocket` support.
+
+v0.5 includes a small reusable helper at `examples/js-client/playlink-client.js`. It wraps the existing WebSocket JSON protocol without introducing a new backend feature or package publishing step. See `docs/js-client-api.md` for the current helper API.
+
+Example usage:
+
+```js
+import { PlaylinkClient } from './playlink-client.js';
+
+const alice = new PlaylinkClient({ name: 'alice' });
+await alice.connect();
+
+const roomId = await alice.createRoom({ roomName: 'demo', maxPlayers: 4 });
+await alice.joinRoom(roomId, 'alice');
+alice.sendRoomMessage({ kind: 'move', x: 3, y: 7 });
+```
+
+Run the two-client SDK demo with the server already running:
+
+```bash
+npm --prefix examples/js-client run sdk-demo
+```
+
+The demo connects Alice and Bob, reads `/api/server`, creates and joins a room, exchanges chat/move-style room messages, verifies broadcasts, and tests leave-room behavior.
+
+For LAN use, first discover or choose the host address, then pass it through environment variables:
+
+```bash
+PLAYLINK_WS_URL=ws://192.168.1.20:7777/ws PLAYLINK_HTTP_URL=http://192.168.1.20:7777 npm --prefix examples/js-client run sdk-demo
+```
+
+## Browser Mini Game Example
+
+v0.5 also includes a tiny browser movement example that uses the same helper and room-message protocol.
+
+Start the Playlink server:
+
+```bash
+rustup run stable cargo run
+```
+
+In another terminal, serve the example page:
+
+```bash
+npm --prefix examples/js-client run mini-game
+```
+
+Open:
+
+```text
+http://127.0.0.1:7780/
+```
+
+For the fastest local demo, connect, create a room, join it, then click `Add Bot` to spawn a second local client in the same page. You can also open two browser tabs, connect both, create a room in one tab, copy the room ID into the other tab, and move with arrow keys or WASD.
+
+The local player moves with a browser animation loop, broadcasts position at about 20Hz, and interpolates remote players for smoother display. Movement is sent as room messages like:
+
+```json
+{
+  "kind": "move",
+  "player_name": "alice",
+  "x": 54,
+  "y": 50
+}
+```
+
+This is intentionally a minimal example rather than a full game engine SDK.
+
 ## Smoke Test
 
 In one terminal, start the server:
@@ -171,6 +351,31 @@ cd examples/js-client
 npm run idle-timeout
 ```
 
+## Documentation Map
+
+- `docs/protocol.md` — WebSocket JSON protocol and error codes
+- `docs/js-client-api.md` — JavaScript helper API
+- `docs/demo-guide.md` — runnable demos and local verification flow
+- `docs/goal.md` — long-term framework direction and work threads
+- `docs/v0.7-relay-groundwork-plan.md` — relay groundwork boundaries and next architecture plan
+- `docs/relay-metadata.md` — future relay metadata design notes
+- `docs/sync-models.md` — future event/state/lockstep sync model boundaries
+
+## Project Stage Status
+
+| Stage | Status | Notes |
+| --- | --- | --- |
+| v0.1 dedicated WebSocket room server | Done | Core create/join/leave/list/broadcast loop is implemented. |
+| JavaScript test client | Done | Smoke, error, idle-timeout, and discovery scripts live in `examples/js-client`. |
+| Web Debug Console | Done | Served from `/` with room inspection and simulator workflow. |
+| v0.3 protocol and room reliability | Done | Structured errors, `room_left`, cleanup behavior, and protocol docs are in place. |
+| v0.4 LAN discovery and host-mode groundwork | Done | `/api/server`, topology metadata, public URL overrides, and optional UDP discovery exist. |
+| v0.5 SDK-style helper and examples | Done | JavaScript helper, SDK demo, and browser mini-game are available. |
+| v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
+| v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
+| v0.8 observability and room stats | In Progress | `/api/stats`, room `message_count`/`created_at`, and Web Console display are implemented. |
+| Future sync modules | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`. |
+
 ## Roadmap
 
 1. v0.1 dedicated WebSocket room server
@@ -178,9 +383,12 @@ npm run idle-timeout
 3. Web debug console
 4. v0.3 protocol and room reliability
 5. v0.4 LAN discovery and host-mode groundwork
-6. relay mode
-7. P2P/NAT traversal experiments
-8. SDKs and example games
+6. v0.5 JavaScript SDK-style helper and example game workflow
+7. v0.6 JavaScript helper stabilization and API docs
+8. v0.7 relay mode groundwork
+9. v0.8 observability and room stats
+10. P2P/NAT traversal experiments
+11. SDK packages and example games
 
 ## Guardrails
 

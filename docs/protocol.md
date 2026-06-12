@@ -100,7 +100,7 @@ Leaves the current room.
 }
 ```
 
-On success, the server removes the player from the current room but does not send a dedicated success acknowledgement. Clients should clear their local current-room state after sending `leave_room` successfully.
+On success, the server responds with `room_left` and removes the player from the current room. Remaining room members receive a `player_left` broadcast event.
 
 If the session is not in a room, the server returns `not_in_room`.
 
@@ -169,6 +169,19 @@ All protocol errors use a structured error payload.
   "payload": {
     "room_id": "00000000-0000-0000-0000-000000000000",
     "player_id": "11111111-1111-1111-1111-111111111111"
+  }
+}
+```
+
+### `room_left`
+
+Acknowledges that the requesting session left its current room.
+
+```json
+{
+  "type": "room_left",
+  "payload": {
+    "room_id": "00000000-0000-0000-0000-000000000000"
   }
 }
 ```
@@ -257,14 +270,14 @@ Sent when the server detects that this client missed room events because it was 
 create_room  → room_created
 join_room    → room_joined + player_joined event
 room_message → room_broadcast event
-leave_room   → player_left event for other room members
+leave_room   → room_left + player_left event for other room members
 last player leaves/disconnects → room is deleted
 ```
 
 Current behavior:
 
 - Empty rooms are cleaned up immediately after the last player leaves or disconnects.
-- A successful `leave_room` has no dedicated acknowledgement message in v0.3; remaining room members receive `player_left`.
+- A successful `leave_room` returns `room_left`; remaining room members receive `player_left`.
 - A client can be in at most one room.
 - Joining another room requires an explicit `leave_room` first.
 - Server state is in-memory only. Restarting the server deletes all rooms.
