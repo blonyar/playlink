@@ -25,7 +25,7 @@ const translations = {
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
-  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'),
+  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
   roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), leaveRoomButton: document.querySelector('#leave-room-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), sendMessageButton: document.querySelector('#send-message-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
@@ -98,10 +98,26 @@ function log(label, value = '') {
   elements.messageLog.scrollTop = elements.messageLog.scrollHeight;
 }
 
+function updateWorkflowState() {
+  const connected = socket?.readyState === WebSocket.OPEN;
+  const joined = Boolean(currentRoomId);
+  const states = [
+    [elements.workflowConnect, connected ? 'done' : 'current'],
+    [elements.workflowRoom, !connected ? 'locked' : joined ? 'done' : 'current'],
+    [elements.workflowMessage, joined ? 'current' : 'locked'],
+  ];
+
+  for (const [element, state] of states) {
+    element.classList.remove('done', 'current', 'locked');
+    element.classList.add(state);
+  }
+}
+
 function renderSessionState() {
   elements.currentPlayer.textContent = socket ? (elements.playerName.value.trim() || 'debug-player') : '-';
   elements.currentRoom.textContent = currentRoomId ?? '-';
   elements.messageCurrentRoom.textContent = currentRoomId ?? '-';
+  updateWorkflowState();
 }
 
 function setSocketState(state) {
