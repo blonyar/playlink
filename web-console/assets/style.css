@@ -409,6 +409,21 @@ label {
   gap: 0.75rem;
 }
 
+.validation-message {
+  min-height: 1.4rem;
+  margin: -0.35rem 0 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.validation-message.valid {
+  color: #86efac;
+}
+
+.validation-message.invalid {
+  color: #fca5a5;
+}
+
 .log {
   min-height: 26rem;
   max-height: 40rem;
