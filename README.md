@@ -38,6 +38,12 @@ http://127.0.0.1:7780/
 
 For all runnable checks and demos, see `docs/demo-guide.md`.
 
+Run the full local verification suite:
+
+```powershell
+.\scripts\verify.ps1
+```
+
 ## Scope
 
 Playlink is designed for:
@@ -75,7 +81,7 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - SDK-style two-client demo script
 - Rust unit tests and JavaScript integration scripts
 
-The current v0.8 focus is observability and room stats. See `docs/v0.8-observability-plan.md`. The v0.7 relay groundwork is complete at `docs/v0.7-relay-groundwork-plan.md`. The v0.6 JavaScript helper stabilization docs remain available at `docs/v0.6-js-sdk-stabilization-plan.md` and `docs/js-client-api.md`.
+The v0.8 observability and room stats milestone is complete. See `docs/v0.8-observability-plan.md`. The next planned milestone is v0.9 lightweight state sync; see `docs/v0.9-state-sync-prototype-plan.md` and `docs/sync-models.md`. The v0.7 relay groundwork is complete at `docs/v0.7-relay-groundwork-plan.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -312,14 +318,18 @@ The local player moves with a browser animation loop, broadcasts position at abo
 
 ```json
 {
-  "kind": "move",
-  "player_name": "alice",
-  "x": 54,
-  "y": 50
+  "kind": "state_snapshot",
+  "tick": 123,
+  "entity_id": "player-id",
+  "state": {
+    "player_name": "alice",
+    "x": 54,
+    "y": 50
+  }
 }
 ```
 
-This is intentionally a minimal example rather than a full game engine SDK.
+Use event-style room messages for turns, chat, cards, and one-off actions. Use `state_snapshot` for lightweight client-published state such as movement or shared cursors. This is intentionally a minimal example rather than a full game engine SDK or server-authoritative sync layer.
 
 ## Smoke Test
 
@@ -337,6 +347,12 @@ npm run smoke
 ```
 
 The smoke test creates a room, joins two clients, exchanges room messages, checks `/api/rooms`, closes one client, and verifies disconnect cleanup.
+
+For a one-command regression run, use:
+
+```powershell
+.\scripts\verify.ps1
+```
 
 To quickly test idle disconnect behavior, start the server with a short timeout:
 
@@ -373,8 +389,8 @@ npm run idle-timeout
 | v0.5 SDK-style helper and examples | Done | JavaScript helper, SDK demo, and browser mini-game are available. |
 | v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
 | v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
-| v0.8 observability and room stats | In Progress | `/api/stats`, room `message_count`/`created_at`, and Web Console display are implemented. |
-| Future sync modules | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`. |
+| v0.8 observability and room stats | Done | `/api/stats`, room `message_count`/`created_at`, Web Console display, and repeatable verification are implemented. |
+| v0.9 lightweight state sync prototype | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`; v0.9 will keep sync conventions example-led. |
 
 ## Roadmap
 

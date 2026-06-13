@@ -170,12 +170,12 @@ room core -> sync module -> game-specific authority adapter
 
 Do not turn the base room server into a game engine.
 
-## 7. Suggested v0.8 Direction
+## 7. Suggested v0.9 Direction
 
 Recommended next sync milestone after v0.7 relay groundwork:
 
 ```text
-v0.8 lightweight state sync prototype plan
+v0.9 lightweight state sync prototype plan
 ```
 
 In scope:
@@ -184,6 +184,8 @@ In scope:
 - add SDK/demo-side throttling examples
 - improve mini-game movement docs
 - optionally add a second mini-game mode that sends structured state snapshots
+
+The current v0.9 plan lives at `docs/v0.9-state-sync-prototype-plan.md`.
 
 Out of scope:
 

@@ -1,4 +1,8 @@
-import { PlaylinkClient } from './playlink-client.js';
+import {
+  PlaylinkClient,
+  StateSnapshotFilter,
+  StateSnapshotPublisher,
+} from './playlink-client.js';
 
 const elements = {
   wsUrl: document.querySelector('#wsUrl'),
@@ -22,12 +26,12 @@ const keys = new Set();
 const players = new Map();
 const remoteTargets = new Map();
 const bots = [];
+const snapshotFilter = new StateSnapshotFilter();
 
 let client = null;
+let localStatePublisher = null;
 let localPosition = { x: 50, y: 50 };
 let lastFrameAt = performance.now();
-let lastNetworkSendAt = 0;
-let lastLocalPositionSent = { x: 50, y: 50 };
 
 const movementSpeedPixelsPerSecond = 260;
 const networkSendIntervalMs = 50;
@@ -93,41 +97,56 @@ function clearPlayers() {
   }
   players.clear();
   remoteTargets.clear();
+  snapshotFilter.clear();
 }
 
 function clamp(value) {
   return Math.max(5, Math.min(95, value));
 }
 
-function hasPositionChangedEnough(a, b) {
-  return Math.abs(a.x - b.x) > 0.1 || Math.abs(a.y - b.y) > 0.1;
+function movementState(playerName, position) {
+  return {
+    player_name: playerName,
+    x: position.x,
+    y: position.y,
+  };
 }
 
-function publishMove(force = false) {
+function hasMovementStateChangedEnough(nextState, previousState) {
+  if (!previousState) return true;
+  return nextState.player_name !== previousState.player_name
+    || Math.abs(nextState.x - previousState.x) > 0.1
+    || Math.abs(nextState.y - previousState.y) > 0.1;
+}
+
+function readSnapshotPosition(snapshot) {
+  const x = Number(snapshot?.state?.x);
+  const y = Number(snapshot?.state?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x: clamp(x), y: clamp(y) };
+}
+
+function publishStateSnapshot(force = false) {
   if (!client?.roomId || !client.playerId) return;
   if (client.socket?.readyState !== WebSocket.OPEN) {
     setStatus('disconnected');
     return;
   }
+  if (!localStatePublisher) return;
 
-  const now = performance.now();
-  if (!force && now - lastNetworkSendAt < networkSendIntervalMs) return;
-  if (!force && !hasPositionChangedEnough(localPosition, lastLocalPositionSent)) return;
-
-  lastNetworkSendAt = now;
-  lastLocalPositionSent = { ...localPosition };
-  client.sendRoomMessage({
-    kind: 'move',
-    player_name: elements.playerName.value,
-    x: localPosition.x,
-    y: localPosition.y,
+  localStatePublisher.publish(movementState(elements.playerName.value, localPosition), {
+    force,
   });
 }
 
-function handleMoveBroadcast(message) {
-  if (message.payload.data?.kind !== 'move') return;
+function handleStateSnapshotBroadcast(message) {
+  const snapshot = message.payload.data;
+  if (snapshot?.kind !== 'state_snapshot') return;
+  if (!snapshotFilter.accepts(snapshot)) return;
+
   const from = message.payload.from;
-  const position = { x: message.payload.data.x, y: message.payload.data.y };
+  const position = readSnapshotPosition(snapshot);
+  if (!position) return;
 
   if (from === client?.playerId) {
     renderPlayer(from, position, true);
@@ -143,13 +162,13 @@ function handleMoveBroadcast(message) {
 function installClientHandlers(activeClient, { isPrimary }) {
   activeClient.on('room_broadcast', (message) => {
     if (isPrimary) {
-      handleMoveBroadcast(message);
+      handleStateSnapshotBroadcast(message);
     }
   });
 
   activeClient.on('player_joined', (message) => {
     if (isPrimary && message.payload.player_id !== activeClient.playerId && activeClient.roomId) {
-      publishMove(true);
+      publishStateSnapshot(true);
     }
   });
 
@@ -175,23 +194,24 @@ async function createBot() {
     position: { x: 30 + index * 8, y: 35 },
     direction: 1,
     playerId: null,
-    lastSendAt: 0,
+    publisher: null,
   };
 
   try {
     await bot.client.connect();
     const joined = await bot.client.joinRoom(client.roomId, bot.name);
     bot.playerId = joined.player_id;
+    bot.publisher = new StateSnapshotPublisher({
+      client: bot.client,
+      entityId: bot.playerId,
+      minIntervalMs: networkSendIntervalMs,
+      hasChanged: hasMovementStateChangedEnough,
+    });
     installClientHandlers(bot.client, { isPrimary: false });
     bots.push(bot);
     renderSessionSummary();
 
-    bot.client.sendRoomMessage({
-      kind: 'move',
-      player_name: bot.name,
-      x: bot.position.x,
-      y: bot.position.y,
-    });
+    bot.publisher.publish(movementState(bot.name, bot.position), { force: true });
 
     log('bot joined', { name: bot.name, playerId: bot.playerId });
   } catch (error) {
@@ -216,7 +236,7 @@ function updateLocalPlayer(deltaSeconds) {
     const arenaBounds = elements.arena.getBoundingClientRect();
     localPosition.x = clamp(localPosition.x + ((dx / length) * speed * deltaSeconds / arenaBounds.width) * 100);
     localPosition.y = clamp(localPosition.y + ((dy / length) * speed * deltaSeconds / arenaBounds.height) * 100);
-    publishMove(false);
+    publishStateSnapshot(false);
   }
 
   renderPlayer(client.playerId, localPosition, true);
@@ -251,15 +271,7 @@ function updateBots(now, deltaSeconds) {
       bot.position.y = clamp(bot.position.y + (36 / arenaBounds.height) * 100);
     }
 
-    if (now - bot.lastSendAt >= networkSendIntervalMs) {
-      bot.lastSendAt = now;
-      bot.client.sendRoomMessage({
-        kind: 'move',
-        player_name: bot.name,
-        x: bot.position.x,
-        y: bot.position.y,
-      });
-    }
+    bot.publisher?.publish(movementState(bot.name, bot.position), { now });
   }
 }
 
@@ -297,6 +309,7 @@ elements.connectButton.addEventListener('click', async () => {
       for (const bot of bots.splice(0)) {
         bot.client.close();
       }
+      localStatePublisher = null;
       clearPlayers();
       renderSessionSummary();
       setStatus('disconnected');
@@ -343,9 +356,14 @@ elements.joinButton.addEventListener('click', async () => {
     renderSessionSummary();
     setStatus(`joined room ${joined.room_id}`);
     localPosition = { x: 50, y: 50 };
-    lastLocalPositionSent = { ...localPosition };
+    localStatePublisher = new StateSnapshotPublisher({
+      client,
+      entityId: joined.player_id,
+      minIntervalMs: networkSendIntervalMs,
+      hasChanged: hasMovementStateChangedEnough,
+    });
     renderPlayer(joined.player_id, localPosition, true);
-    publishMove(true);
+    publishStateSnapshot(true);
     log('joined room', joined);
   } catch (error) {
     log('failed to join room', { message: error.message, code: error.code });
@@ -368,6 +386,7 @@ elements.leaveButton.addEventListener('click', async () => {
 
   try {
     await client.leaveRoom();
+    localStatePublisher = null;
     clearPlayers();
     renderSessionSummary();
     setJoinedUi(false);

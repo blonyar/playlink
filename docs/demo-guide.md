@@ -11,6 +11,14 @@ Required:
 - Rust stable toolchain through `rustup`
 - Node.js 20 or newer for built-in `fetch` and `WebSocket`
 
+Fast full verification:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+Use `.\scripts\verify.ps1 -SkipIntegration` when you only want format, compile, unit tests, and JavaScript syntax checks.
+
 Useful commands:
 
 ```bash
@@ -134,7 +142,7 @@ npm --prefix examples/js-client run sdk-demo
 Expected result:
 
 ```text
-Playlink v0.6 SDK demo passed.
+Playlink SDK demo passed.
 ```
 
 The helper API is documented in `docs/js-client-api.md`.
@@ -238,7 +246,13 @@ Use `PLAYLINK_PUBLIC_HTTP_URL` and `PLAYLINK_PUBLIC_WS_URL` on the server when y
 
 ## 11. Recommended Full Local Verification
 
-With the server stopped:
+Preferred one-command verification:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+Manual static checks:
 
 ```bash
 rustup run stable cargo fmt --check
@@ -251,6 +265,7 @@ node --check examples/js-client/mini-game-server.js
 node --check web-console/assets/app.js
 node --check examples/js-client/smoke.js
 node --check examples/js-client/errors.js
+node --check examples/js-client/state-sync.js
 ```
 
 With the server running:
@@ -258,6 +273,7 @@ With the server running:
 ```bash
 npm --prefix examples/js-client run smoke
 npm --prefix examples/js-client run errors
+npm --prefix examples/js-client run state-sync
 npm --prefix examples/js-client run sdk-demo
 ```
 

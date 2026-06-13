@@ -9,6 +9,7 @@
   "scripts": {
     "smoke": "node smoke.js",
     "idle-timeout": "node idle-timeout.js",
+    "state-sync": "node state-sync.js",
     "errors": "node errors.js",
     "discover-lan": "node discover-lan.js",
     "sdk-demo": "node sdk-demo.js",

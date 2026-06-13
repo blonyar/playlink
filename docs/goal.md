@@ -164,7 +164,7 @@ Rules:
 - Update checklists when work is completed.
 - Keep README aligned with implemented behavior.
 
-## 5. Near-Term Milestone: v0.8 Observability
+## 5. Recently Completed Milestone: v0.8 Observability
 
 v0.8 adds a lightweight observability vertical slice so the room server is easier to inspect.
 
@@ -203,9 +203,9 @@ Out of scope:
 - [x] Web Console displays room message counts or creation metadata.
 - [x] JavaScript smoke or SDK demo verifies stats behavior.
 - [x] README and demo docs mention the stats endpoint.
-- [ ] Rust checks/tests pass.
-- [ ] JavaScript syntax checks pass.
-- [ ] Server-backed smoke/errors/sdk-demo pass.
+- [x] Rust checks/tests pass.
+- [x] JavaScript syntax checks pass.
+- [x] Server-backed smoke/errors/sdk-demo pass.
 
 ## 6. Medium-Term Milestone: v0.7 Relay Groundwork
 
@@ -230,7 +230,24 @@ Out of scope initially:
 
 Acceptance should focus on clear design and boundaries before code.
 
-## 7. Longer-Term Milestones
+## 7. Next Milestone: v0.9 Lightweight State Sync Prototype
+
+The next planned milestone is `docs/v0.9-state-sync-prototype-plan.md`.
+
+Purpose:
+
+- make the existing mini-game movement pattern easier to reuse
+- document state snapshot conventions inside `room_message.data`
+- keep state sync example-led before adding protocol or server-authoritative features
+
+Initial v0.9 constraints:
+
+- no new core WebSocket message types
+- no server-authoritative simulation
+- no physics, rollback, ECS replication, or binary protocol changes
+- keep raw event sync working exactly as it does today
+
+## 8. Longer-Term Milestones
 
 Potential sequence:
 
@@ -243,7 +260,7 @@ Potential sequence:
 
 The order can change, but each milestone should keep the core room loop intact.
 
-## 8. Atomic Commit Policy
+## 9. Atomic Commit Policy
 
 Use one commit per coherent task:
 
@@ -255,7 +272,13 @@ Use one commit per coherent task:
 
 Do not mix unrelated architecture, docs, SDK, and protocol changes unless they are required for one behavior.
 
-Before each commit:
+Before each commit, prefer the one-command verification script:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+Manual equivalent:
 
 ```bash
 rustup run stable cargo fmt --check
@@ -278,7 +301,7 @@ npm --prefix examples/js-client run errors
 npm --prefix examples/js-client run sdk-demo
 ```
 
-## 9. Push Policy
+## 10. Push Policy
 
 After each atomic commit, push the current branch:
 
@@ -293,7 +316,7 @@ If push fails due to network or TLS problems:
 - continue only if the next task can be safely based on the local commit
 - retry push before ending the session
 
-## 10. Definition of Done for a Milestone
+## 11. Definition of Done for a Milestone
 
 A milestone is done when:
 

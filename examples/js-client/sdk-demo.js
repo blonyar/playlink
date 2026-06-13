@@ -23,23 +23,24 @@ async function main() {
   console.log(`Connected to ${server.name} (${server.topology}) at ${advertisedWsUrl}`);
 
   step(2, 'Create a room with Alice, then join Alice and Bob');
-  const roomId = await alice.createRoom({ roomName: 'v0.6 sdk demo', maxPlayers: 4 });
+  const roomId = await alice.createRoom({ roomName: 'sdk demo', maxPlayers: 4 });
   console.log(`Created room ${roomId}`);
   const aliceJoin = await alice.joinRoom(roomId, 'alice');
   const bobJoin = await bob.joinRoom(roomId, 'bob');
   console.log(`Alice player id: ${aliceJoin.player_id}`);
   console.log(`Bob player id: ${bobJoin.player_id}`);
 
-  step(3, 'Wait until Alice observes Bob joining');  await alice.waitFor('player_joined', (message) => message.payload.player_name === 'bob');
+  step(3, 'Wait until Alice observes Bob joining');
+  await alice.waitFor('player_joined', (message) => message.payload.player_name === 'bob');
   console.log('Alice observed Bob joining the room.');
 
   step(4, 'Send a chat-style room message from Alice to Bob');
-  alice.sendRoomMessage({ kind: 'chat', text: 'hello from the v0.6 SDK example' });
+  alice.sendRoomMessage({ kind: 'chat', text: 'hello from the SDK example' });
   const bobReceived = await bob.waitFor(
     'room_broadcast',
     (message) => message.payload.from === aliceJoin.player_id
       && message.payload.data.kind === 'chat'
-      && message.payload.data.text === 'hello from the v0.6 SDK example',
+      && message.payload.data.text === 'hello from the SDK example',
   );
   console.log(`Bob received: ${bobReceived.payload.data.text}`);
 
@@ -68,7 +69,7 @@ async function main() {
 
   alice.close();
   bob.close();
-  console.log('Playlink v0.6 SDK demo passed.');
+  console.log('Playlink SDK demo passed.');
 }
 
 main().catch((error) => {

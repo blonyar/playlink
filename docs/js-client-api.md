@@ -14,7 +14,12 @@ The examples expect:
 ## 2. Import
 
 ```js
-import { PlaylinkClient } from './playlink-client.js';
+import {
+  PlaylinkClient,
+  createStateSnapshot,
+  StateSnapshotFilter,
+  StateSnapshotPublisher,
+} from './playlink-client.js';
 ```
 
 ## 3. Constructor
@@ -170,7 +175,71 @@ await client.ping();
 
 Expected response: `pong`.
 
-## 8. HTTP Helper Methods
+## 8. State Sync Helpers
+
+State sync is an example-side convention layered on top of ordinary `room_message` broadcasts. The Playlink server does not interpret these payloads.
+
+### `createStateSnapshot({ tick, entityId, state })`
+
+Builds a state snapshot payload:
+
+```js
+const snapshot = createStateSnapshot({
+  tick: 1,
+  entityId: alice.playerId,
+  state: { x: 54, y: 50 },
+});
+
+alice.sendRoomMessage(snapshot);
+```
+
+Output shape:
+
+```json
+{
+  "kind": "state_snapshot",
+  "tick": 1,
+  "entity_id": "player-id",
+  "state": {
+    "x": 54,
+    "y": 50
+  }
+}
+```
+
+### `StateSnapshotFilter`
+
+Filters stale snapshots per `entity_id` using the highest accepted `tick`.
+
+```js
+const filter = new StateSnapshotFilter();
+
+client.on('room_broadcast', (message) => {
+  const snapshot = message.payload.data;
+  if (filter.accepts(snapshot)) {
+    console.log(snapshot.entity_id, snapshot.state);
+  }
+});
+```
+
+### `StateSnapshotPublisher`
+
+Publishes snapshots with monotonic ticks, shallow state-change detection, and a minimum send interval.
+
+```js
+const publisher = new StateSnapshotPublisher({
+  client: alice,
+  entityId: alice.playerId,
+  minIntervalMs: 50,
+});
+
+publisher.publish({ x: 54, y: 50 });
+publisher.publish({ x: 55, y: 50 }, { force: true });
+```
+
+Use this for lightweight movement/shared-cursor examples. It is not server-authoritative state validation.
+
+## 9. HTTP Helper Methods
 
 ### `listRooms()`
 
@@ -188,7 +257,7 @@ Fetches `/api/server`.
 const server = await client.serverInfo();
 ```
 
-## 9. Low-Level Methods
+## 10. Low-Level Methods
 
 ### `request(type, payload = undefined, timeoutMs = 5000)`
 
@@ -220,7 +289,7 @@ client.send({
 
 Throws if the socket is not open.
 
-## 10. Event Helpers
+## 11. Event Helpers
 
 ### `on(type, handler)`
 
@@ -252,7 +321,7 @@ Behavior:
 - waits for future messages if no existing match is found
 - rejects on timeout
 
-## 11. Errors
+## 12. Errors
 
 Server protocol errors reject matching requests with a JavaScript `Error` whose `code` property is set to the protocol error code.
 
@@ -279,7 +348,7 @@ Current protocol error codes include:
 - `rate_limited`
 - `internal_error`
 
-## 12. Minimal Example
+## 13. Minimal Example
 
 ```js
 import { PlaylinkClient } from './playlink-client.js';
@@ -307,7 +376,7 @@ alice.close();
 bob.close();
 ```
 
-## 13. Compatibility Notes
+## 14. Compatibility Notes
 
 This helper follows the current JSON protocol documented in `docs/protocol.md`.
 
