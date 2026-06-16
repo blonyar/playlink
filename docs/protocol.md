@@ -1,12 +1,38 @@
-# Playlink Protocol v0.3
+# Playlink JSON/WebSocket Room Protocol
 
-Playlink v0.3 uses JSON messages over WebSocket. The default WebSocket endpoint is:
+Playlink uses JSON messages over WebSocket. The default WebSocket endpoint is:
 
 ```text
 ws://localhost:7777/ws
 ```
 
 The protocol is designed for small room-based multiplayer prototypes. It is intentionally simple: create a room, join it, send room messages, leave, and inspect state through the debug API.
+
+## v1.0 Baseline Contract
+
+The v1.0 baseline freezes the current room protocol message names, required payload fields, structured error shape, and room lifecycle semantics documented below.
+
+Stable client messages:
+
+- `create_room`
+- `join_room`
+- `leave_room`
+- `room_message`
+- `ping`
+
+Stable server messages:
+
+- `room_created`
+- `room_joined`
+- `room_left`
+- `player_joined`
+- `player_left`
+- `room_broadcast`
+- `event_lagged`
+- `pong`
+- `error`
+
+State sync remains a convention inside `room_message.payload.data`; it is not a separate server protocol in the v1.0 baseline.
 
 ## 1. Message Envelope
 
@@ -294,4 +320,4 @@ Within one room, events are sent through a Tokio broadcast channel. The server p
 
 ## 8. Compatibility Policy
 
-v0.3 stabilizes the current JSON message names and structured error shape. Future changes should prefer additive fields and new message types over breaking existing fields.
+The v1.0 baseline stabilizes the current JSON message names, required payload fields, room lifecycle behavior, and structured error shape. Future changes should prefer additive fields and new message types over breaking existing fields.

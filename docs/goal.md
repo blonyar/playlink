@@ -2,7 +2,7 @@
 
 ## 1. North Star
 
-Playlink should become a modular multiplayer networking framework for small games, prototypes, LAN parties, and room-based online play.
+Playlink should become a modular multiplayer networking toolkit for 2-8 player small games, prototypes, LAN parties, and room-based online play.
 
 The long-term target is not an MMO backend or a monolithic game platform. The target is a clean framework where a developer can start simple and gradually choose only the networking modules they need:
 
@@ -17,13 +17,13 @@ Every milestone should preserve these constraints:
 - Keep the room-based multiplayer loop working at all times.
 - Prefer optional modules over required core dependencies.
 - Keep raw WebSocket + JSON protocol usable even as SDKs improve.
-- Avoid accounts, global matchmaking, anti-cheat, databases, and MMO-scale systems until the small-room framework is mature.
+- Avoid accounts, global matchmaking, anti-cheat, databases, production admin permissions, and MMO-scale systems until the small-room framework is mature.
 - Add extension points before adding heavy implementations.
 - Make each change testable with Rust checks, JavaScript checks, or repeatable scripts.
 
 ## 3. Current Baseline
 
-Completed or mostly completed:
+Completed:
 
 - v0.1 dedicated WebSocket room server
 - v0.2 Web Debug Console
@@ -33,6 +33,11 @@ Completed or mostly completed:
 - v0.6 JavaScript helper stabilization and API docs
 - v0.7 relay groundwork plan
 - v0.8 observability and room stats
+- v0.9 lightweight state sync prototype
+
+Active convergence target:
+
+- v1.0 stable baseline for the room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow
 
 Current implementation includes:
 
@@ -49,6 +54,7 @@ Current implementation includes:
 - room snapshots with `created_at_unix_secs` and `message_count`
 - optional UDP LAN discovery
 - JavaScript helper, smoke/error/discovery scripts, SDK demo, and mini-game example
+- state snapshot helpers and stale tick filtering
 - JavaScript client API documentation
 - relay groundwork planning document
 
@@ -164,103 +170,68 @@ Rules:
 - Update checklists when work is completed.
 - Keep README aligned with implemented behavior.
 
-## 5. Recently Completed Milestone: v0.8 Observability
+## 5. Completed Milestones
 
-v0.8 adds a lightweight observability vertical slice so the room server is easier to inspect.
+The current baseline already includes:
 
-Why:
+- v0.1 dedicated WebSocket room server
+- v0.2 Web Debug Console
+- v0.3 protocol and room reliability
+- v0.4 host metadata and optional LAN discovery prototype
+- v0.5 JavaScript helper and example game workflow
+- v0.6 JavaScript helper stabilization and API docs
+- v0.7 relay groundwork design
+- v0.8 observability and room stats
+- v0.9 lightweight state sync prototype
 
-- v0.6 already stabilized the JS helper and API docs.
-- v0.7 defined relay groundwork boundaries.
-- Stats make the current room server easier to debug for small multiplayer prototypes.
+Historical planning docs remain useful as implementation records, but they should not override the current README, this goal document, or `docs/v1.0-baseline.md`.
 
-### v0.8 Scope
+## 6. Active Milestone: v1.0 Stable Baseline
 
-In scope:
-
-- In-memory server stats (`uptime_seconds`, `room_count`, `player_count`, `total_rooms_created`, `total_messages_broadcast`).
-- `GET /api/stats` endpoint.
-- Per-room `created_at_unix_secs` and `message_count`.
-- Web Console displays stats and per-room metadata.
-- JavaScript smoke test verifies stats behavior.
-- README and demo docs mention the stats endpoint.
-
-Out of scope:
-
-- Prometheus/OpenTelemetry integration
-- metrics persistence
-- historical charts
-- relay runtime
-- P2P/NAT traversal
-
-### v0.8 Acceptance Criteria
-
-- [x] `docs/v0.8-observability-plan.md` exists.
-- [x] `GET /api/stats` returns uptime, active room count, active player count, total rooms created, and total messages broadcast.
-- [x] Room snapshots include `created_at_unix_secs` and `message_count`.
-- [x] Room details include `created_at_unix_secs` and `message_count`.
-- [x] Web Console displays server stats.
-- [x] Web Console displays room message counts or creation metadata.
-- [x] JavaScript smoke or SDK demo verifies stats behavior.
-- [x] README and demo docs mention the stats endpoint.
-- [x] Rust checks/tests pass.
-- [x] JavaScript syntax checks pass.
-- [x] Server-backed smoke/errors/sdk-demo pass.
-
-## 6. Medium-Term Milestone: v0.7 Relay Groundwork
-
-Relay groundwork should come after SDK stabilization. The current planning document is `docs/v0.7-relay-groundwork-plan.md`.
-
-In scope:
-
-- relay design document
-- topology model extension planning
-- relay constraints and non-goals
-- protocol impact review
-- no-op or metadata-only relay placeholders if useful
-
-Out of scope initially:
-
-- production relay infrastructure
-- accounts
-- global matchmaking
-- billing/quotas
-- anti-cheat
-- NAT traversal implementation
-
-Acceptance should focus on clear design and boundaries before code.
-
-## 7. Next Milestone: v0.9 Lightweight State Sync Prototype
-
-The next planned milestone is `docs/v0.9-state-sync-prototype-plan.md`.
+The next milestone is `docs/v1.0-baseline.md`.
 
 Purpose:
 
-- make the existing mini-game movement pattern easier to reuse
-- document state snapshot conventions inside `room_message.data`
-- keep state sync example-led before adding protocol or server-authoritative features
+- freeze the JSON/WebSocket room protocol documented in `docs/protocol.md`
+- freeze the JavaScript helper API documented in `docs/js-client-api.md`
+- keep the Web Debug Console explicitly dev-only
+- keep state sync as an example-side `state_snapshot` convention
+- keep `.\scripts\verify.ps1` as the one-command release gate
+- remove stale roadmap language that still treats v0.9 as planning
 
-Initial v0.9 constraints:
+Hard acceptance points:
 
-- no new core WebSocket message types
-- no server-authoritative simulation
-- no physics, rollback, ECS replication, or binary protocol changes
-- keep raw event sync working exactly as it does today
+- protocol examples match emitted JSON
+- explicit leave, disconnect cleanup, and idle timeout cleanup stay idempotent
+- state snapshot helpers reject duplicate, stale, and out-of-order ticks
+- README, goal, roadmap, protocol, JS API, and sync docs agree on milestone status
+- `.\scripts\verify.ps1` passes
 
-## 8. Longer-Term Milestones
+Out of scope for v1.0:
 
-Potential sequence:
+- accounts
+- databases
+- global matchmaking
+- anti-cheat
+- production admin permissions
+- server-authoritative simulation
+- ECS replication
+- rollback netcode
+- premature crate splitting
 
-1. v0.6 JS SDK stabilization
-2. v0.7 relay groundwork design
-3. v0.8 observability and room stats
-4. v0.9 lightweight state sync module prototype
-5. v0.10 additional SDK or engine integration experiment
-6. v1.0 stable room server + JS SDK + debug console baseline
+## 7. After v1.0
 
-The order can change, but each milestone should keep the core room loop intact.
+Potential follow-up sequence:
 
-## 9. Atomic Commit Policy
+1. v1.0 stable room protocol + JS helper + debug console baseline
+2. additional SDK or engine integration experiment
+3. relay runtime prototype as an optional topology module
+4. P2P/NAT traversal experiments with relay fallback
+5. packaged SDKs only after helper API pressure is real
+
+The order can change, but each milestone must keep the core room loop intact and must not turn `RoomRegistry` into topology, simulation, account, or persistence infrastructure.
+
+## 8. Atomic Commit Policy
 
 Use one commit per coherent task:
 
@@ -301,7 +272,7 @@ npm --prefix examples/js-client run errors
 npm --prefix examples/js-client run sdk-demo
 ```
 
-## 10. Push Policy
+## 9. Push Policy
 
 After each atomic commit, push the current branch:
 
@@ -316,7 +287,7 @@ If push fails due to network or TLS problems:
 - continue only if the next task can be safely based on the local commit
 - retry push before ending the session
 
-## 11. Definition of Done for a Milestone
+## 10. Definition of Done for a Milestone
 
 A milestone is done when:
 

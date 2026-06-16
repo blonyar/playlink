@@ -17,6 +17,8 @@ Fast full verification:
 .\scripts\verify.ps1
 ```
 
+This is the v1.0 baseline gate. It should pass before changing protocol, helper API, debug console behavior, or state-sync conventions.
+
 Use `.\scripts\verify.ps1 -SkipIntegration` when you only want format, compile, unit tests, and JavaScript syntax checks.
 
 Useful commands:

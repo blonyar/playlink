@@ -53,6 +53,11 @@ function testStaleSnapshotFiltering() {
     entityId: 'player:alice',
     state: { x: 12 },
   });
+  const outOfOrder = createStateSnapshot({
+    tick: 1,
+    entityId: 'player:alice',
+    state: { x: 9 },
+  });
   const otherEntity = createStateSnapshot({
     tick: 1,
     entityId: 'player:bob',
@@ -62,6 +67,7 @@ function testStaleSnapshotFiltering() {
   assert.equal(filter.accepts(first), true);
   assert.equal(filter.accepts(duplicate), false);
   assert.equal(filter.accepts(newer), true);
+  assert.equal(filter.accepts(outOfOrder), false);
   assert.equal(filter.accepts(otherEntity), true);
 
   filter.clear('player:alice');

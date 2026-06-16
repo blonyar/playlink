@@ -444,6 +444,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn leave_room_cleanup_is_idempotent() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2));
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let bob = player("Bob");
+        let bob_id = bob.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.join_room(room_id, bob).await.unwrap();
+
+        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(Uuid::new_v4(), alice_id).await;
+
+        let detail = registry.detail(room_id).await.unwrap();
+        assert_eq!(detail.players.len(), 1);
+        assert_eq!(detail.players[0].id, bob_id);
+
+        registry.leave_room(room_id, bob_id).await;
+        registry.leave_room(room_id, bob_id).await;
+
+        assert!(registry.detail(room_id).await.is_none());
+    }
+
+    #[tokio::test]
     async fn broadcast_publishes_room_message_event() {
         let registry = RoomRegistry::default();
         let room_id = registry.create_room(None, Some(1));

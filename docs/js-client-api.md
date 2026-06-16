@@ -4,6 +4,8 @@
 
 It wraps the current WebSocket JSON protocol without hiding the protocol shape. It is intended for examples and prototypes, not yet a published npm package.
 
+For the v1.0 baseline, this document is the helper API contract for examples. The file can still change internally, but documented exports, method names, option names, state fields, protocol shapes, and error behavior should change only additively.
+
 ## 1. Runtime Requirements
 
 The examples expect:
@@ -380,4 +382,4 @@ bob.close();
 
 This helper follows the current JSON protocol documented in `docs/protocol.md`.
 
-Future SDK changes should prefer additive behavior and preserve raw protocol compatibility wherever possible.
+Future SDK changes should prefer additive behavior and preserve raw protocol compatibility wherever possible. A future published SDK may wrap or reorganize this helper, but v1.0 examples should keep the documented `PlaylinkClient`, `createStateSnapshot`, `StateSnapshotFilter`, and `StateSnapshotPublisher` contracts working.

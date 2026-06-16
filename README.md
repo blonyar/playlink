@@ -58,7 +58,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, v0.6 JavaScript helper documentation/stabilization, v0.7 relay groundwork design, and v0.8 observability:
+Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, v0.6 JavaScript helper documentation/stabilization, v0.7 relay groundwork design, v0.8 observability, and the v0.9 lightweight state sync prototype. The active convergence target is the v1.0 baseline in `docs/v1.0-baseline.md`:
 
 - Rust server
 - WebSocket transport
@@ -77,11 +77,13 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - server/network metadata endpoint
 - optional LAN discovery prototype
 - small JavaScript client helper
+- state snapshot helper utilities
 - JavaScript helper API documentation
 - SDK-style two-client demo script
+- browser mini-game using `state_snapshot` messages
 - Rust unit tests and JavaScript integration scripts
 
-The v0.8 observability and room stats milestone is complete. See `docs/v0.8-observability-plan.md`. The next planned milestone is v0.9 lightweight state sync; see `docs/v0.9-state-sync-prototype-plan.md` and `docs/sync-models.md`. The v0.7 relay groundwork is complete at `docs/v0.7-relay-groundwork-plan.md`.
+The v0.8 observability and room stats milestone is complete. See `docs/v0.8-observability-plan.md`. The v0.9 lightweight state sync prototype is complete; see `docs/v0.9-state-sync-prototype-plan.md` and `docs/sync-models.md`. The next milestone is the v1.0 baseline: freeze the JSON/WebSocket room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow. See `docs/v1.0-baseline.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -94,7 +96,7 @@ core/        rooms, players, sessions, events, heartbeat
 transport/   websocket first; UDP and QUIC later
 topology/    dedicated server first; host, relay, and P2P later
 protocol/    JSON first; MessagePack or Protobuf later
-sync/        event sync first; state sync and lockstep later
+sync/        event sync and state snapshot conventions first; lockstep later
 discovery/   manual IP first; LAN discovery and registry later
 admin/       health, room list, debug console, logs, metrics
 ```
@@ -373,6 +375,7 @@ npm run idle-timeout
 - `docs/js-client-api.md` — JavaScript helper API
 - `docs/demo-guide.md` — runnable demos and local verification flow
 - `docs/goal.md` — long-term framework direction and work threads
+- `docs/v1.0-baseline.md` — active v1.0 baseline contracts and acceptance criteria
 - `docs/v0.7-relay-groundwork-plan.md` — relay groundwork boundaries and next architecture plan
 - `docs/relay-metadata.md` — future relay metadata design notes
 - `docs/sync-models.md` — future event/state/lockstep sync model boundaries
@@ -390,7 +393,8 @@ npm run idle-timeout
 | v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
 | v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
 | v0.8 observability and room stats | Done | `/api/stats`, room `message_count`/`created_at`, Web Console display, and repeatable verification are implemented. |
-| v0.9 lightweight state sync prototype | Planning | Event/state/lockstep boundaries are documented in `docs/sync-models.md`; v0.9 will keep sync conventions example-led. |
+| v0.9 lightweight state sync prototype | Done | `state_snapshot` helpers, stale tick filtering, mini-game usage, and docs are implemented. |
+| v1.0 stable baseline | In progress | Freeze protocol/API/debug-console/state-sync contracts and keep `.\scripts\verify.ps1` as the release gate. |
 
 ## Roadmap
 
@@ -403,8 +407,10 @@ npm run idle-timeout
 7. v0.6 JavaScript helper stabilization and API docs
 8. v0.7 relay mode groundwork
 9. v0.8 observability and room stats
-10. P2P/NAT traversal experiments
-11. SDK packages and example games
+10. v0.9 lightweight state sync prototype
+11. v1.0 stable room protocol + JS helper + debug console baseline
+12. SDK packages and example games
+13. Relay, P2P, and NAT traversal experiments after the baseline is stable
 
 ## Guardrails
 

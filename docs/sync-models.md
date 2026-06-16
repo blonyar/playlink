@@ -2,7 +2,7 @@
 
 Playlink starts with event sync: clients send room messages and the server broadcasts them to room members.
 
-This document outlines future sync models without committing the current server core to a heavy simulation architecture.
+This document outlines current and future sync models without committing the room core to a heavy simulation architecture.
 
 ## 1. Goals
 
@@ -80,7 +80,7 @@ Limitations:
 
 ## 4. State Sync
 
-Clients or a server authority publish state snapshots.
+Clients publish state snapshots as an example-side convention over ordinary room messages. The current Playlink server does not interpret these payloads.
 
 Example payload:
 
@@ -88,9 +88,10 @@ Example payload:
 {
   "kind": "state_snapshot",
   "tick": 120,
-  "players": {
-    "alice": { "x": 42, "y": 18 },
-    "bob": { "x": 50, "y": 20 }
+  "entity_id": "player:alice",
+  "state": {
+    "x": 42,
+    "y": 18
   }
 }
 ```
@@ -102,12 +103,12 @@ Best for:
 - shared cursors
 - simple physics-free action games
 
-Possible future support:
+Current v0.9 support:
 
-- SDK helper for snapshot throttling
-- example interpolation utilities
-- optional sequence/tick conventions
-- mini-game state-sync example mode
+- JavaScript helper for snapshot creation
+- stale, duplicate, and out-of-order tick filtering per entity
+- throttled snapshot publishing
+- mini-game state-sync example behavior
 
 Avoid initially:
 
@@ -170,20 +171,21 @@ room core -> sync module -> game-specific authority adapter
 
 Do not turn the base room server into a game engine.
 
-## 7. Suggested v0.9 Direction
+## 7. Implemented v0.9 Direction
 
-Recommended next sync milestone after v0.7 relay groundwork:
+v0.9 lightweight state sync is implemented as an example-led convention:
 
 ```text
-v0.9 lightweight state sync prototype plan
+room_message.payload.data.kind = "state_snapshot"
 ```
 
-In scope:
+Implemented scope:
 
-- document state sync conventions
-- add SDK/demo-side throttling examples
-- improve mini-game movement docs
-- optionally add a second mini-game mode that sends structured state snapshots
+- documented state sync conventions
+- SDK/demo-side throttling helper
+- stale tick filtering
+- mini-game movement using structured state snapshots
+- focused JavaScript helper checks
 
 The current v0.9 plan lives at `docs/v0.9-state-sync-prototype-plan.md`.
 
@@ -197,25 +199,15 @@ Out of scope:
 
 ## 8. Protocol Strategy
 
-Do not add new core protocol messages immediately.
+Do not add new core protocol messages for state sync in the v1.0 baseline.
 
-Prefer conventions inside `room_message.data` first:
+Use conventions inside `room_message.payload.data`:
 
 ```json
 {
   "kind": "move",
   "x": 54,
   "y": 50
-}
-```
-
-Then evolve toward documented optional conventions:
-
-```json
-{
-  "kind": "state_snapshot",
-  "tick": 123,
-  "entities": {}
 }
 ```
 

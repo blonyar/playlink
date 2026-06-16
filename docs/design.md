@@ -381,70 +381,29 @@ Show:
 
 ## 11. Roadmap
 
-### Stage 0: Foundation
+Completed foundation:
 
-- repository setup
-- README and design docs
-- Rust server skeleton
-- health endpoint
-- room list endpoint
-- WebSocket endpoint
+- v0.1 dedicated WebSocket room server
+- JavaScript test client and repeatable smoke/error scripts
+- Web Debug Console
+- v0.3 protocol and room reliability
+- v0.4 LAN discovery and host metadata groundwork
+- v0.5 JavaScript helper and browser mini-game workflow
+- v0.6 JavaScript helper stabilization and API docs
+- v0.7 relay groundwork design
+- v0.8 observability and room stats
+- v0.9 lightweight state sync prototype
 
-### Stage 1: v0.1 Room Server
+Active target:
 
-- create room
-- join room
-- leave room
-- broadcast room messages
-- ping/pong
-- basic disconnect cleanup
-- manual API testing
+- v1.0 stable baseline: freeze the JSON/WebSocket room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow.
 
-### Stage 2: Test Client
+After v1.0:
 
-- JavaScript WebSocket test client
-- create/join/send UI or CLI
-- repeatable local multiplayer smoke test
-
-### Stage 3: Debug Console
-
-- room list UI
-- player list UI
-- message stream UI
-- simple broadcast tester
-
-### Stage 4: LAN Discovery
-
-- LAN server advertisement
-- LAN client discovery
-- local network connection flow
-
-### Stage 5: Host Mode
-
-- package server behavior so a player can host locally
-- document host/client flows
-
-### Stage 6: Relay Mode
-
-- relay service
-- relay room registration
-- relay fallback path
-
-### Stage 7: P2P Experiments
-
-- NAT type investigation
-- STUN-style discovery
-- UDP hole punching experiments
-- relay fallback
-
-### Stage 8: SDKs and Examples
-
-- JavaScript SDK
-- Rust client helper
-- Godot example
-- simple chat example
-- position sync example
-- turn-based example
+- additional SDK or engine integration experiment
+- SDK package only after the helper API has real usage pressure
+- relay runtime prototype as an optional topology module
+- P2P/NAT traversal experiments with relay fallback
 
 ## 12. Scope Control
 
