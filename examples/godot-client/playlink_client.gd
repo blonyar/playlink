@@ -1,5 +1,5 @@
 extends Node
-class_name PlaylinkClient
+# Autoload singleton — access from any script as PlaylinkClient
 
 # ─ Signals ──────────────────────────────────────────────
 signal connected()
