@@ -113,12 +113,26 @@ export class StateSnapshotPublisher {
 }
 
 export class PlaylinkClient {
+  static CONNECTING = 'connecting';
+  static CONNECTED = 'connected';
+  static DISCONNECTED = 'disconnected';
+  static RECONNECTING = 'reconnecting';
+
+  #state;
+  #messageQueue;
+  #reconnectAttempt;
+  #reconnectTimer;
+  #intentionalClose;
+
   constructor({
     name = 'player',
     wsUrl = envValue('PLAYLINK_WS_URL', 'ws://localhost:7777/ws'),
     httpUrl = envValue('PLAYLINK_HTTP_URL', 'http://localhost:7777'),
     log = null,
     keepaliveIntervalMs = 10000,
+    reconnect = true,
+    maxReconnectAttempts = 10,
+    reconnectBaseDelayMs = 1000,
   } = {}) {
     this.name = name;
     this.wsUrl = wsUrl;
@@ -133,6 +147,19 @@ export class PlaylinkClient {
     this.nextRequestNumber = 1;
     this.keepaliveIntervalMs = keepaliveIntervalMs;
     this.keepaliveTimer = null;
+    this.reconnect = reconnect;
+    this.maxReconnectAttempts = maxReconnectAttempts;
+    this.reconnectBaseDelayMs = reconnectBaseDelayMs;
+    this.members = [];
+    this.#state = PlaylinkClient.DISCONNECTED;
+    this.#messageQueue = [];
+    this.#reconnectAttempt = 0;
+    this.#reconnectTimer = null;
+    this.#intentionalClose = false;
+  }
+
+  get state() {
+    return this.#state;
   }
 
   async connect(timeoutMs = 5000) {
@@ -140,8 +167,10 @@ export class PlaylinkClient {
       return this;
     }
 
+    this.#intentionalClose = false;
     const socket = new WebSocket(this.wsUrl);
     this.socket = socket;
+    this.#setState(PlaylinkClient.CONNECTING);
 
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -173,23 +202,22 @@ export class PlaylinkClient {
 
     socket.addEventListener('close', () => {
       if (this.socket !== socket) return;
-      this.#stopKeepalive();
-      for (const { reject, timeout } of this.pending.values()) {
-        clearTimeout(timeout);
-        reject(new Error(`${this.name} connection closed`));
-      }
-      this.pending.clear();
-      this.roomId = null;
-      this.playerId = null;
+      this.#onSocketClose();
     });
 
+    this.#setState(PlaylinkClient.CONNECTED);
+    this.#reconnectAttempt = 0;
     this.#startKeepalive();
     return this;
   }
 
   close() {
+    this.#intentionalClose = true;
+    this.#stopReconnect();
     this.#stopKeepalive();
     this.socket?.close();
+    this.#clearSession();
+    this.#setState(PlaylinkClient.DISCONNECTED);
   }
 
   on(type, handler) {
@@ -217,16 +245,23 @@ export class PlaylinkClient {
     });
     this.roomId = response.payload.room_id;
     this.playerId = response.payload.player_id;
+    this.members = [];
     return response.payload;
   }
 
   async leaveRoom() {
     const response = await this.request('leave_room');
     this.roomId = null;
+    this.playerId = null;
+    this.members = [];
     return response.payload;
   }
 
   sendRoomMessage(data) {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      this.#messageQueue.push(data);
+      return;
+    }
     this.send({
       type: 'room_message',
       payload: { data },
@@ -294,6 +329,14 @@ export class PlaylinkClient {
     });
   }
 
+  #setState(newState) {
+    if (this.#state === newState) return;
+    this.#state = newState;
+    for (const handler of this.handlers.get('state_change') ?? []) {
+      handler(newState);
+    }
+  }
+
   #startKeepalive() {
     this.#stopKeepalive();
     if (!this.keepaliveIntervalMs) return;
@@ -315,6 +358,126 @@ export class PlaylinkClient {
     }
   }
 
+  #onSocketClose() {
+    this.#stopKeepalive();
+    this.#rejectPending('connection closed');
+
+    if (this.#intentionalClose) {
+      this.#clearSession();
+      this.#setState(PlaylinkClient.DISCONNECTED);
+      return;
+    }
+
+    this.#setState(PlaylinkClient.DISCONNECTED);
+    this.socket = null;
+    this.#clearSession();
+
+    if (!this.reconnect || this.#reconnectAttempt >= this.maxReconnectAttempts) {
+      this.#setState(PlaylinkClient.DISCONNECTED);
+      return;
+    }
+
+    this.#scheduleReconnect();
+  }
+
+  #scheduleReconnect() {
+    this.#setState(PlaylinkClient.RECONNECTING);
+    const delay = this.reconnectBaseDelayMs * Math.pow(2, this.#reconnectAttempt);
+    const jitter = Math.random() * delay * 0.3;
+    this.#reconnectTimer = setTimeout(() => this.#tryReconnect(), delay + jitter);
+  }
+
+  async #tryReconnect() {
+    this.#reconnectAttempt++;
+    this.log?.(`[${this.name}] reconnecting (attempt ${this.#reconnectAttempt}/${this.maxReconnectAttempts})...`);
+
+    const socket = new WebSocket(this.wsUrl);
+    this.socket = socket;
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          socket.close();
+          reject(new Error('reconnect timeout'));
+        }, 5000);
+
+        socket.addEventListener('open', () => {
+          clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+
+        socket.addEventListener('error', () => {
+          clearTimeout(timeout);
+          reject(new Error('reconnect failed'));
+        }, { once: true });
+      });
+    } catch {
+      if (this.#reconnectAttempt < this.maxReconnectAttempts) {
+        this.#scheduleReconnect();
+      }
+      return;
+    }
+
+    socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
+      const message = JSON.parse(event.data);
+      this.messages.push(message);
+      if (this.messages.length > 200) {
+        this.messages.splice(0, this.messages.length - 200);
+      }
+      this.log?.(`[${this.name}] <= ${JSON.stringify(message)}`);
+      this.#handleMessage(message);
+    });
+
+    socket.addEventListener('close', () => {
+      if (this.socket !== socket) return;
+      this.#onSocketClose();
+    });
+
+    this.#setState(PlaylinkClient.CONNECTED);
+    this.#reconnectAttempt = 0;
+    this.#startKeepalive();
+    this.#flushMessageQueue();
+
+    for (const handler of this.handlers.get('reconnected') ?? []) {
+      handler();
+    }
+  }
+
+  #stopReconnect() {
+    if (this.#reconnectTimer) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
+    }
+    this.#reconnectAttempt = 0;
+  }
+
+  #clearSession() {
+    this.roomId = null;
+    this.playerId = null;
+    this.members = [];
+  }
+
+  #flushMessageQueue() {
+    if (this.#messageQueue.length === 0) return;
+    const queue = this.#messageQueue;
+    this.#messageQueue = [];
+    for (const data of queue) {
+      this.send({
+        type: 'room_message',
+        payload: { data },
+      });
+    }
+  }
+
+  #rejectPending(reason) {
+    for (const { reject, timeout } of this.pending.values()) {
+      clearTimeout(timeout);
+      reject(new Error(`${this.name} ${reason}`));
+    }
+    this.pending.clear();
+  }
+
   #handleMessage(message) {
     if (message.id && this.pending.has(message.id)) {
       const pending = this.pending.get(message.id);
@@ -328,6 +491,20 @@ export class PlaylinkClient {
       } else {
         pending.resolve(message);
       }
+    }
+
+    if (message.type === 'player_joined') {
+      const existing = this.members.findIndex((m) => m.id === message.payload.player_id);
+      if (existing === -1) {
+        this.members.push({
+          id: message.payload.player_id,
+          name: message.payload.player_name,
+        });
+      }
+    }
+
+    if (message.type === 'player_left') {
+      this.members = this.members.filter((m) => m.id !== message.payload.player_id);
     }
 
     for (const handler of this.handlers.get(message.type) ?? []) {

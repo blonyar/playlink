@@ -45,17 +45,22 @@ Options:
 | `httpUrl` | string | `PLAYLINK_HTTP_URL` or `http://localhost:7777` | HTTP API base URL. |
 | `log` | function or null | `null` | Optional logger for sent/received messages. |
 | `keepaliveIntervalMs` | number or null | `10000` | Sends protocol `ping` messages periodically while connected. Use `0` or `null` to disable. |
+| `reconnect` | boolean | `true` | Auto-reconnect on unexpected disconnect. Set to `false` to disable. |
+| `maxReconnectAttempts` | number | `10` | Maximum reconnection attempts before giving up. |
+| `reconnectBaseDelayMs` | number | `1000` | Initial delay before first reconnect attempt. Delay doubles with each attempt (exponential backoff with 30% random jitter). |
 
 ## 4. State Fields
 
-The helper exposes a few fields for examples:
+The helper exposes fields for examples and apps:
 
 | Field | Description |
 | --- | --- |
 | `socket` | Active `WebSocket`, or `null`. |
 | `playerId` | Current player ID after `joinRoom()`, or `null`. |
 | `roomId` | Current room ID after `joinRoom()`, or `null`. |
-| `messages` | Bounded recent message history. |
+| `messages` | Bounded recent message history (max 200). |
+| `members` | Array of `{ id, name }` objects for current room members. Updated automatically from `player_joined`/`player_left` events. |
+| `state` | Connection state: `PlaylinkClient.CONNECTING`, `PlaylinkClient.CONNECTED`, `PlaylinkClient.DISCONNECTED`, or `PlaylinkClient.RECONNECTING`. |
 
 These fields are intentionally simple for examples. A future packaged SDK may formalize or hide them.
 
@@ -87,7 +92,8 @@ When the socket closes:
 
 - keepalive stops
 - pending requests reject
-- `roomId` and `playerId` are cleared
+- `roomId`, `playerId`, and `members` are cleared
+- auto-reconnect is **not** triggered (this is an intentional close)
 
 ## 6. Room Lifecycle Methods
 
@@ -166,6 +172,8 @@ client.sendRoomMessage({
 ```
 
 Expected room event for room members: `room_broadcast`.
+
+If the WebSocket is not currently open (e.g., during reconnection), the message data is queued and sent automatically once the connection is restored.
 
 ### `ping()`
 
@@ -304,6 +312,37 @@ const off = client.on('room_broadcast', (message) => {
 
 // later
 off();
+```
+
+Protocol message events:
+
+| Event type | Trigger |
+| --- | --- |
+| `room_created` | Room created by this client. |
+| `room_joined` | This client joined a room. |
+| `room_left` | This client left a room. |
+| `player_joined` | A player joined the room. |
+| `player_left` | A player left the room. |
+| `room_broadcast` | Room message broadcast. |
+| `pong` | Server ping response. |
+| `event_lagged` | Room events were skipped. |
+| `error` | Protocol error. |
+
+Lifecycle events:
+
+| Event type | Trigger |
+| --- | --- |
+| `reconnected` | Fired after a successful auto-reconnect. Use this to check room state and re-join if needed. |
+| `state_change` | Fired on every connection state change. Receives the new state string. |
+
+```js
+client.on('reconnected', () => {
+  console.log('connection restored');
+});
+
+client.on('state_change', (newState) => {
+  console.log('state:', newState);
+});
 ```
 
 ### `waitFor(type, predicate = () => true, timeoutMs = 5000)`
