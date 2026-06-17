@@ -123,6 +123,8 @@ export class PlaylinkClient {
   #reconnectAttempt;
   #reconnectTimer;
   #intentionalClose;
+  #lastRoomId;
+  #lastPlayerName;
 
   constructor({
     name = 'player',
@@ -133,6 +135,7 @@ export class PlaylinkClient {
     reconnect = true,
     maxReconnectAttempts = 10,
     reconnectBaseDelayMs = 1000,
+    rejoinOnReconnect = true,
   } = {}) {
     this.name = name;
     this.wsUrl = wsUrl;
@@ -150,12 +153,15 @@ export class PlaylinkClient {
     this.reconnect = reconnect;
     this.maxReconnectAttempts = maxReconnectAttempts;
     this.reconnectBaseDelayMs = reconnectBaseDelayMs;
+    this.rejoinOnReconnect = rejoinOnReconnect;
     this.members = [];
     this.#state = PlaylinkClient.DISCONNECTED;
     this.#messageQueue = [];
     this.#reconnectAttempt = 0;
     this.#reconnectTimer = null;
     this.#intentionalClose = false;
+    this.#lastRoomId = null;
+    this.#lastPlayerName = null;
   }
 
   get state() {
@@ -217,6 +223,7 @@ export class PlaylinkClient {
     this.#stopKeepalive();
     this.socket?.close();
     this.#clearSession();
+    this.#clearSavedRoom();
     this.#setState(PlaylinkClient.DISCONNECTED);
   }
 
@@ -246,6 +253,8 @@ export class PlaylinkClient {
     this.roomId = response.payload.room_id;
     this.playerId = response.payload.player_id;
     this.members = [];
+    this.#lastRoomId = roomId;
+    this.#lastPlayerName = playerName;
     return response.payload;
   }
 
@@ -254,6 +263,8 @@ export class PlaylinkClient {
     this.roomId = null;
     this.playerId = null;
     this.members = [];
+    this.#lastRoomId = null;
+    this.#lastPlayerName = null;
     return response.payload;
   }
 
@@ -284,6 +295,14 @@ export class PlaylinkClient {
     const response = await fetch(`${this.httpUrl}/api/server`);
     if (!response.ok) {
       throw new Error(`server info failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async fetchStats() {
+    const response = await fetch(`${this.httpUrl}/api/stats`);
+    if (!response.ok) {
+      throw new Error(`stats fetching failed: ${response.status}`);
     }
     return response.json();
   }
@@ -439,6 +458,27 @@ export class PlaylinkClient {
     this.#startKeepalive();
     this.#flushMessageQueue();
 
+    if (this.rejoinOnReconnect && this.#lastRoomId && this.#lastPlayerName) {
+      try {
+        const response = await this.request('join_room', {
+          room_id: this.#lastRoomId,
+          player_name: this.#lastPlayerName,
+        });
+        this.roomId = response.payload.room_id;
+        this.playerId = response.payload.player_id;
+        this.members = [];
+        for (const handler of this.handlers.get('rejoined') ?? []) {
+          handler(response.payload);
+        }
+      } catch (error) {
+        this.#lastRoomId = null;
+        this.#lastPlayerName = null;
+        for (const handler of this.handlers.get('rejoin_failed') ?? []) {
+          handler(error);
+        }
+      }
+    }
+
     for (const handler of this.handlers.get('reconnected') ?? []) {
       handler();
     }
@@ -456,6 +496,11 @@ export class PlaylinkClient {
     this.roomId = null;
     this.playerId = null;
     this.members = [];
+  }
+
+  #clearSavedRoom() {
+    this.#lastRoomId = null;
+    this.#lastPlayerName = null;
   }
 
   #flushMessageQueue() {

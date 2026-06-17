@@ -48,6 +48,7 @@ Options:
 | `reconnect` | boolean | `true` | Auto-reconnect on unexpected disconnect. Set to `false` to disable. |
 | `maxReconnectAttempts` | number | `10` | Maximum reconnection attempts before giving up. |
 | `reconnectBaseDelayMs` | number | `1000` | Initial delay before first reconnect attempt. Delay doubles with each attempt (exponential backoff with 30% random jitter). |
+| `rejoinOnReconnect` | boolean | `true` | After a successful reconnect, automatically rejoin the previous room. The client stores the last room ID and player name on `joinRoom()`. |
 
 ## 4. State Fields
 
@@ -267,6 +268,15 @@ Fetches `/api/server`.
 const server = await client.serverInfo();
 ```
 
+### `fetchStats()`
+
+Fetches `/api/stats`.
+
+```js
+const stats = await client.fetchStats();
+console.log(stats.uptime_seconds, stats.room_count, stats.player_count);
+```
+
 ## 10. Low-Level Methods
 
 ### `request(type, payload = undefined, timeoutMs = 5000)`
@@ -332,12 +342,22 @@ Lifecycle events:
 
 | Event type | Trigger |
 | --- | --- |
-| `reconnected` | Fired after a successful auto-reconnect. Use this to check room state and re-join if needed. |
+| `reconnected` | Fired after a successful auto-reconnect (before rejoin attempt). |
+| `rejoined` | Fired after auto-rejoin succeeds. Receives `{ room_id, player_id }`. |
+| `rejoin_failed` | Fired when auto-rejoin fails (e.g., room was removed). Receives an `Error`. |
 | `state_change` | Fired on every connection state change. Receives the new state string. |
 
 ```js
 client.on('reconnected', () => {
   console.log('connection restored');
+});
+
+client.on('rejoined', (payload) => {
+  console.log('rejoined room', payload.room_id);
+});
+
+client.on('rejoin_failed', (error) => {
+  console.log('could not rejoin room:', error.message);
 });
 
 client.on('state_change', (newState) => {
