@@ -34,10 +34,12 @@ Completed:
 - v0.7 relay groundwork plan
 - v0.8 observability and room stats
 - v0.9 lightweight state sync prototype
+- v1.0 stable baseline for the room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow
 
 Active convergence target:
 
-- v1.0 stable baseline for the room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow
+- SDK packages and example game integrations (next milestone)
+- Relay, P2P, and NAT traversal experiments after SDK scope is clearer
 
 Current implementation includes:
 
@@ -186,44 +188,28 @@ The current baseline already includes:
 
 Historical planning docs remain useful as implementation records, but they should not override the current README, this goal document, or `docs/v1.0-baseline.md`.
 
-## 6. Active Milestone: v1.0 Stable Baseline
+## 6. Completed Milestone: v1.0 Stable Baseline
 
-The next milestone is `docs/v1.0-baseline.md`.
+`docs/v1.0-baseline.md` is implemented and verified.
 
-Purpose:
+Acceptance points met:
 
-- freeze the JSON/WebSocket room protocol documented in `docs/protocol.md`
-- freeze the JavaScript helper API documented in `docs/js-client-api.md`
-- keep the Web Debug Console explicitly dev-only
-- keep state sync as an example-side `state_snapshot` convention
-- keep `.\scripts\verify.ps1` as the one-command release gate
-- remove stale roadmap language that still treats v0.9 as planning
+- protocol examples match emitted JSON ✓
+- explicit leave, disconnect cleanup, and idle timeout cleanup stay idempotent ✓
+- state snapshot helpers reject duplicate, stale, and out-of-order ticks ✓
+- README, goal, roadmap, protocol, JS API, and sync docs agree on milestone status ✓
+- `.\scripts\verify.ps1` passes ✓
 
-Hard acceptance points:
+Next direction:
 
-- protocol examples match emitted JSON
-- explicit leave, disconnect cleanup, and idle timeout cleanup stay idempotent
-- state snapshot helpers reject duplicate, stale, and out-of-order ticks
-- README, goal, roadmap, protocol, JS API, and sync docs agree on milestone status
-- `.\scripts\verify.ps1` passes
-
-Out of scope for v1.0:
-
-- accounts
-- databases
-- global matchmaking
-- anti-cheat
-- production admin permissions
-- server-authoritative simulation
-- ECS replication
-- rollback netcode
-- premature crate splitting
+- SDK packages and example game integrations
+- Relay, P2P, and NAT traversal experiments after SDK scope is clearer
 
 ## 7. After v1.0
 
 Potential follow-up sequence:
 
-1. v1.0 stable room protocol + JS helper + debug console baseline
+1. v1.0 stable room protocol + JS helper + debug console baseline ✓
 2. additional SDK or engine integration experiment
 3. relay runtime prototype as an optional topology module
 4. P2P/NAT traversal experiments with relay fallback

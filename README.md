@@ -58,7 +58,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, a v0.5 JavaScript SDK-style example, v0.6 JavaScript helper documentation/stabilization, v0.7 relay groundwork design, v0.8 observability, and the v0.9 lightweight state sync prototype. The active convergence target is the v1.0 baseline in `docs/v1.0-baseline.md`:
+Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper API, Web Debug Console boundary, state sync conventions, and one-command verification flow are stable.
 
 - Rust server
 - WebSocket transport
@@ -82,8 +82,9 @@ Playlink currently has a stable room-server core with v0.4 LAN/host groundwork, 
 - SDK-style two-client demo script
 - browser mini-game using `state_snapshot` messages
 - Rust unit tests and JavaScript integration scripts
+- one-command verification via `.\scripts\verify.ps1`
 
-The v0.8 observability and room stats milestone is complete. See `docs/v0.8-observability-plan.md`. The v0.9 lightweight state sync prototype is complete; see `docs/v0.9-state-sync-prototype-plan.md` and `docs/sync-models.md`. The next milestone is the v1.0 baseline: freeze the JSON/WebSocket room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow. See `docs/v1.0-baseline.md`.
+See `docs/v1.0-baseline.md` for the full baseline contract.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -394,7 +395,7 @@ npm run idle-timeout
 | v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
 | v0.8 observability and room stats | Done | `/api/stats`, room `message_count`/`created_at`, Web Console display, and repeatable verification are implemented. |
 | v0.9 lightweight state sync prototype | Done | `state_snapshot` helpers, stale tick filtering, mini-game usage, and docs are implemented. |
-| v1.0 stable baseline | In progress | Freeze protocol/API/debug-console/state-sync contracts and keep `.\scripts\verify.ps1` as the release gate. |
+| v1.0 stable baseline | Done | Protocol, JS helper API, debug console, state sync contracts, and `.\scripts\verify.ps1` release gate are implemented. |
 
 ## Roadmap
 
@@ -408,7 +409,7 @@ npm run idle-timeout
 8. v0.7 relay mode groundwork
 9. v0.8 observability and room stats
 10. v0.9 lightweight state sync prototype
-11. v1.0 stable room protocol + JS helper + debug console baseline
+11. v1.0 stable room protocol + JS helper + debug console baseline ✓
 12. SDK packages and example games
 13. Relay, P2P, and NAT traversal experiments after the baseline is stable
 
