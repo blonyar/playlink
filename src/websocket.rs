@@ -184,9 +184,22 @@ async fn handle_client_message(
                 return Ok(());
             };
 
+            let trimmed = player_name.trim();
+            if trimmed.is_empty() || trimmed.len() > 32 {
+                send(
+                    outgoing_tx,
+                    request_id,
+                    ServerMessage::error(
+                        ErrorCode::InvalidMessage,
+                        "Player name must be between 1 and 32 characters",
+                    ),
+                )?;
+                return Ok(());
+            }
+
             let player = Player {
                 id: session.player_id,
-                name: player_name.clone(),
+                name: trimmed.to_string(),
             };
 
             match state.rooms.join_room(room_id, player).await {
@@ -300,10 +313,12 @@ fn send(
     message: ServerMessage,
 ) -> Result<(), mpsc::error::TrySendError<String>> {
     let envelope = ServerEnvelope::new(request_id, message);
-    if let Ok(text) = serde_json::to_string(&envelope) {
-        outgoing_tx.try_send(text)
-    } else {
-        Ok(())
+    match serde_json::to_string(&envelope) {
+        Ok(text) => outgoing_tx.try_send(text),
+        Err(error) => {
+            tracing::warn!(%error, "failed to serialize server message");
+            Ok(())
+        }
     }
 }
 

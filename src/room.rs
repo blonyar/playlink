@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicI64, AtomicU64, Ordering},
         Arc,
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use dashmap::DashMap;
@@ -15,12 +15,24 @@ use uuid::Uuid;
 
 use crate::protocol::{ErrorCode, PlaylinkError, RoomEvent};
 
-#[derive(Default)]
 pub struct RoomRegistry {
     rooms: DashMap<Uuid, Room>,
     config: RoomRegistryConfig,
     total_rooms_created: AtomicU64,
     total_messages_broadcast: AtomicU64,
+    active_players: AtomicI64,
+}
+
+impl Default for RoomRegistry {
+    fn default() -> Self {
+        Self {
+            rooms: DashMap::new(),
+            config: RoomRegistryConfig::default(),
+            total_rooms_created: AtomicU64::new(0),
+            total_messages_broadcast: AtomicU64::new(0),
+            active_players: AtomicI64::new(0),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -93,15 +105,53 @@ pub struct RoomRegistryStats {
 
 impl RoomRegistry {
     pub fn new(config: RoomRegistryConfig) -> Self {
+        let config = RoomRegistryConfig {
+            default_max_players: config.default_max_players.max(1),
+            max_players_per_room: config.max_players_per_room.max(1),
+            room_event_buffer: config.room_event_buffer.max(1),
+        };
         Self {
             rooms: DashMap::new(),
-            config: RoomRegistryConfig {
-                default_max_players: config.default_max_players.max(1),
-                max_players_per_room: config.max_players_per_room.max(1),
-                room_event_buffer: config.room_event_buffer.max(1),
-            },
+            config,
             total_rooms_created: AtomicU64::new(0),
             total_messages_broadcast: AtomicU64::new(0),
+            active_players: AtomicI64::new(0),
+        }
+    }
+
+    /// Periodically removes rooms that have 0 players and are not marked as removing.
+    /// Catches rooms that were created but never joined (room leak).
+    pub fn spawn_cleanup_task(self: &Arc<Self>, interval: Duration) -> tokio::task::JoinHandle<()> {
+        let registry = self.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(interval);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tick.tick().await;
+                registry.cleanup_empty_rooms().await;
+            }
+        })
+    }
+
+    async fn cleanup_empty_rooms(&self) {
+        let rooms: Vec<(Uuid, Arc<Mutex<RoomState>>)> = self
+            .rooms
+            .iter()
+            .map(|entry| (*entry.key(), entry.value().state.clone()))
+            .collect();
+        for (id, state) in rooms {
+            let should_remove = {
+                let mut state = state.lock().await;
+                let empty = state.players.is_empty();
+                if empty {
+                    state.removing = true;
+                }
+                empty
+            };
+            if should_remove {
+                self.rooms.remove(&id);
+                tracing::debug!(room_id = %id, "removed empty room via cleanup task");
+            }
         }
     }
 
@@ -164,6 +214,7 @@ impl RoomRegistry {
 
             state.players.insert(player.id, player.clone());
         }
+        self.active_players.fetch_add(1, Ordering::Relaxed);
 
         room.publish(RoomEvent::PlayerJoined {
             player_id: player.id,
@@ -179,6 +230,9 @@ impl RoomRegistry {
                 let mut state = room.state.lock().await;
                 let player_removed = state.players.remove(&player_id).is_some();
                 let room_empty = state.players.is_empty();
+                if player_removed {
+                    self.active_players.fetch_sub(1, Ordering::Relaxed);
+                }
                 if room_empty {
                     state.removing = true;
                 }
@@ -273,15 +327,9 @@ impl RoomRegistry {
     }
 
     pub async fn stats(&self) -> RoomRegistryStats {
-        let mut player_count = 0;
-        for entry in self.rooms.iter() {
-            let state = entry.value().state.lock().await;
-            player_count += state.players.len();
-        }
-
         RoomRegistryStats {
             room_count: self.rooms.len(),
-            player_count,
+            player_count: self.active_players.load(Ordering::Relaxed).max(0) as usize,
             total_rooms_created: self.total_rooms_created.load(Ordering::Relaxed),
             total_messages_broadcast: self.total_messages_broadcast.load(Ordering::Relaxed),
         }

@@ -209,6 +209,7 @@ async fn main() {
         max_players_per_room: config.max_players_per_room,
         room_event_buffer: config.room_event_buffer,
     }));
+    let _cleanup_task = rooms.spawn_cleanup_task(Duration::from_secs(30));
     let state = AppState {
         rooms,
         config: config.clone(),
