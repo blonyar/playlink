@@ -234,7 +234,89 @@ Tab 2: Connect -> paste room ID -> Join
 Move both players and watch room_broadcast events drive remote movement
 ```
 
-## 10. LAN SDK Demo Flow
+## 10. Godot Client Example
+
+Purpose:
+
+- demonstrate the GDScript `PlaylinkClient` helper
+- connect, create/join/leave rooms, and send messages from Godot 4
+- inspect room members through the `members` array
+
+The Godot example lives in `examples/godot-client/`.
+
+### Project Structure
+
+```text
+examples/godot-client/
+  project.godot           Godot 4 project
+  playlink_client.gd      PlaylinkClient autoload script
+  example.gd              Demo scene script with simple UI
+  example.tscn            Demo scene
+```
+
+### How to Run
+
+1. Start the Playlink server:
+   ```bash
+   rustup run stable cargo run
+   ```
+
+2. Open the Godot project in Godot 4:
+   ```text
+   File -> Open -> select examples/godot-client/project.godot
+   ```
+
+3. Run the scene (`F5`):
+   ```text
+   Connect -> enter player name -> Create Room
+   Copy the room ID -> open a second instance -> Connect -> paste room ID -> Join
+   Type messages and watch them appear in both instances
+   ```
+
+### PlaylinkClient API
+
+The `PlaylinkClient` is registered as an autoload and can be accessed as `PlaylinkClient` from any script:
+
+```gdscript
+extends Node
+
+func _ready():
+    PlaylinkClient.connected.connect(_on_connected)
+    PlaylinkClient.room_joined.connect(_on_room_joined)
+
+func _on_connected():
+    PlaylinkClient.player_name = "kang"
+    PlaylinkClient.create_room("Lobby", 4)
+
+func _on_room_joined(room_id, player_id):
+    PlaylinkClient.send_room_message({ text = "hello from Godot!" })
+```
+
+Available signals:
+
+| Signal | Payloads |
+| --- | --- |
+| `connected()` | — |
+| `disconnected()` | — |
+| `connection_failed()` | — |
+| `room_created(room_id)` | `room_id: String` |
+| `room_joined(room_id, player_id)` | `room_id, player_id: String` |
+| `room_left(room_id)` | `room_id: String` |
+| `player_joined(player_id, player_name)` | `player_id, player_name: String` |
+| `player_left(player_id)` | `player_id: String` |
+| `room_broadcast(from_id, data)` | `from_id: String`, `data: Dictionary` |
+| `pong()` | — |
+| `error_received(code, message)` | `code, message: String` |
+| `event_lagged(skipped)` | `skipped: int` |
+
+Configure the server URL before connecting:
+
+```gdscript
+PlaylinkClient.ws_url = "ws://192.168.1.20:7777/ws"
+PlaylinkClient.connect_to_server()
+```
+
+## 11. LAN SDK Demo Flow
 
 If another machine should connect to a host on the same LAN, choose or discover the host address first.
 
@@ -246,7 +328,7 @@ PLAYLINK_WS_URL=ws://192.168.1.20:7777/ws PLAYLINK_HTTP_URL=http://192.168.1.20:
 
 Use `PLAYLINK_PUBLIC_HTTP_URL` and `PLAYLINK_PUBLIC_WS_URL` on the server when you want `/api/server` and discovery responses to advertise a specific reachable address.
 
-## 11. Recommended Full Local Verification
+## 12. Recommended Full Local Verification
 
 Preferred one-command verification:
 
@@ -286,7 +368,7 @@ http://localhost:7777/
 http://127.0.0.1:7780/
 ```
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### WebSocket is not defined
 

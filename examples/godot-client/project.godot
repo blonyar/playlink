@@ -1,0 +1,9 @@
+; Playlink Godot Client Example
+[application]
+config/name="Playlink Godot Client"
+config/description="Example Godot 4 project demonstrating Playlink multiplayer networking"
+run/main_scene="res://example.tscn"
+config/features=PackedStringArray("4.0", "Forward Plus")
+
+[autoload]
+PlaylinkClient="*res://playlink_client.gd"
