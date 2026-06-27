@@ -229,25 +229,34 @@ fn optional_env(key: &str) -> Option<String> {
 }
 
 fn env_bool(key: &str, default: bool) -> bool {
-    std::env::var(key)
-        .ok()
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(default)
+    let Ok(raw) = std::env::var(key) else {
+        return default;
+    };
+    let trimmed = raw.trim().to_ascii_lowercase();
+    match trimmed.as_str() {
+        "1" | "true" | "yes" | "on" => true,
+        "0" | "false" | "no" | "off" => false,
+        _ => {
+            tracing::warn!(%key, %raw, "invalid bool value, using default ({default})");
+            default
+        }
+    }
 }
 
 fn env_parse<T>(key: &str, default: T) -> T
 where
     T: std::str::FromStr,
 {
-    std::env::var(key)
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(default)
+    let Ok(raw) = std::env::var(key) else {
+        return default;
+    };
+    match raw.trim().parse() {
+        Ok(value) => value,
+        Err(_) => {
+            tracing::warn!(%key, raw = %raw.as_str(), "invalid value, using default");
+            default
+        }
+    }
 }
 
 /// Builds the core app (API + WebSocket routes) with shared state applied. The
