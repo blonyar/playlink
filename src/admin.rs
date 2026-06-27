@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -23,16 +25,22 @@ pub struct StatsResponse {
     pub uptime_seconds: u64,
     pub room_count: usize,
     pub player_count: usize,
+    pub connection_count: usize,
     pub total_rooms_created: u64,
     pub total_messages_broadcast: u64,
 }
 
 impl StatsResponse {
-    fn from_registry(uptime_seconds: u64, stats: RoomRegistryStats) -> Self {
+    fn from_registry(
+        uptime_seconds: u64,
+        connection_count: usize,
+        stats: RoomRegistryStats,
+    ) -> Self {
         Self {
             uptime_seconds,
             room_count: stats.room_count,
             player_count: stats.player_count,
+            connection_count,
             total_rooms_created: stats.total_rooms_created,
             total_messages_broadcast: stats.total_messages_broadcast,
         }
@@ -53,8 +61,13 @@ pub async fn server_info(State(state): State<AppState>) -> Json<ServerMetadata> 
 
 pub async fn stats(State(state): State<AppState>) -> Json<StatsResponse> {
     let uptime_seconds = state.started_at.elapsed().as_secs();
+    let connection_count = state.connections.load(Ordering::Relaxed);
     let registry_stats = state.rooms.stats().await;
-    Json(StatsResponse::from_registry(uptime_seconds, registry_stats))
+    Json(StatsResponse::from_registry(
+        uptime_seconds,
+        connection_count,
+        registry_stats,
+    ))
 }
 
 pub async fn list_rooms(State(state): State<AppState>) -> Json<Vec<RoomSnapshot>> {

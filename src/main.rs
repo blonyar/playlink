@@ -694,4 +694,14 @@ mod ws_integration {
         let broadcast = expect_message(&mut bob, "room_broadcast").await;
         assert_eq!(broadcast["payload"]["data"]["move"], "left");
     }
+
+    #[tokio::test]
+    async fn stats_reports_connection_count() {
+        let state = integration_state();
+        state
+            .connections
+            .store(2, std::sync::atomic::Ordering::Relaxed);
+        let response = crate::admin::stats(axum::extract::State(state)).await.0;
+        assert_eq!(response.connection_count, 2);
+    }
 }
