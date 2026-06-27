@@ -50,13 +50,25 @@ Current implementation includes:
 - structured errors
 - `room_left` acknowledgement
 - player sessions and idle cleanup
+- per-session token-bucket message rate limiting
+- global connection cap with per-IP limiting (RAII-guarded)
+- room-count cap with `ServerFull` error
+- transport-layer message-size enforcement (tungstenite)
+- WebSocket Origin header validation (CSWSH protection, prod mode)
+- player/room name sanitization (control-character rejection)
+- graceful shutdown broadcasting a close signal to active connections
 - Web Debug Console with server stats dashboard
 - server metadata endpoint
-- server stats endpoint (`/api/stats`) with uptime, room/player counts, and cumulative counters
+- server stats endpoint (`/api/stats`) with uptime, room/player/connection counts, and cumulative counters
 - room snapshots with `created_at_unix_secs` and `message_count`
-- optional UDP LAN discovery
+- optional UDP LAN discovery (private-range filtered)
 - JavaScript helper, smoke/error/discovery scripts, SDK demo, and mini-game example
+- Godot 4 client (autoload singleton, signals, keepalive)
 - state snapshot helpers and stale tick filtering
+- configuration validation with startup warnings
+- broadcast concurrency via `RoomState` RwLock
+- embedded web console via `include_dir` (self-contained binary)
+- environment-variable parse-failure warnings
 - JavaScript client API documentation
 - relay groundwork planning document
 
@@ -73,8 +85,13 @@ Responsibilities:
 - room lifecycle invariants
 - player membership checks
 - leave/disconnect cleanup
-- message size and future rate limits
+- message size and rate limits ✓
 - room event lag handling
+- graceful shutdown (close active connections on Ctrl+C)
+- connection and room capacity caps ✓
+- player/room name sanitization ✓
+- `RoomState` RwLock for concurrent broadcast reads
+- per-IP connection limiting
 - tests for edge cases
 
 Rules:
@@ -185,6 +202,7 @@ The current baseline already includes:
 - v0.7 relay groundwork design
 - v0.8 observability and room stats
 - v0.9 lightweight state sync prototype
+- hardening-pass (on-going): security, concurrency, and capacity hardening across transport, protocol, and lifecycle layers
 
 Historical planning docs remain useful as implementation records, but they should not override the current README, this goal document, or `docs/v1.0-baseline.md`.
 

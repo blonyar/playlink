@@ -86,6 +86,8 @@ Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper A
 
 See `docs/v1.0-baseline.md` for the full baseline contract.
 
+Additional hardening (transport-layer message-size enforcement, origin validation, per-session rate limiting, global and per-IP connection caps, graceful shutdown, name sanitization, RwLock broadcast concurrency, and env-parse warnings) is available on the `v0.4-lan-discovery-prototype` branch and will land in the next baseline release.
+
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
 For runnable checks and demos, see `docs/demo-guide.md`.
@@ -135,6 +137,7 @@ Example `/api/stats` response:
   "uptime_seconds": 120,
   "room_count": 2,
   "player_count": 5,
+  "connection_count": 3,
   "total_rooms_created": 12,
   "total_messages_broadcast": 84
 }
@@ -147,6 +150,7 @@ Field notes:
 | `uptime_seconds` | Seconds since this Playlink process started. |
 | `room_count` | Current active rooms. |
 | `player_count` | Current active players across rooms. |
+| `connection_count` | Current active WebSocket connections. |
 | `total_rooms_created` | Rooms created since process start. |
 | `total_messages_broadcast` | Room messages broadcast since process start. |
 
@@ -160,7 +164,7 @@ PLAYLINK_PUBLIC_HTTP_URL=http://192.168.1.20:7777
 PLAYLINK_PUBLIC_WS_URL=ws://192.168.1.20:7777/ws
 ```
 
-`PLAYLINK_SERVER_ID` is optional, but recommended when a host should keep a stable identity across restarts or configuration changes. When omitted, Playlink derives a deterministic fallback from the server name, topology, and bind address.
+`PLAYLINK_SERVER_ID` is optional, but recommended when a host should keep a stable identity across restarts or configuration changes. When omitted, Playlink generates a unique per-process identifier combining the server name, topology, and an instance UUID.
 
 Example `/api/server` response with public URL overrides:
 
@@ -393,7 +397,7 @@ npm run idle-timeout
 | v0.5 SDK-style helper and examples | Done | JavaScript helper, SDK demo, and browser mini-game are available. |
 | v0.6 JavaScript helper stabilization | Done | API docs, `room_left` coverage, and guided demo output are in place. |
 | v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
-| v0.8 observability and room stats | Done | `/api/stats`, room `message_count`/`created_at`, Web Console display, and repeatable verification are implemented. |
+| v0.8 observability and room stats | Done | `/api/stats` with connection, room, and player counts; room `message_count`/`created_at`; Web Console display; repeatable verification. |
 | v0.9 lightweight state sync prototype | Done | `state_snapshot` helpers, stale tick filtering, mini-game usage, and docs are implemented. |
 | v1.0 stable baseline | Done | Protocol, JS helper API, debug console, state sync contracts, and `.\scripts\verify.ps1` release gate are implemented. |
 
