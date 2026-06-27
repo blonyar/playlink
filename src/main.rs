@@ -6,9 +6,10 @@ mod session;
 mod websocket;
 
 use std::{
-    net::SocketAddr,
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
     path::Path,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{atomic::AtomicUsize, Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -45,6 +46,7 @@ pub struct AppState {
     config: Arc<Config>,
     started_at: Instant,
     connections: Arc<AtomicUsize>,
+    connections_per_ip: Arc<Mutex<HashMap<IpAddr, u32>>>,
     shutdown: broadcast::Sender<()>,
 }
 
@@ -117,6 +119,7 @@ pub struct Config {
     pub cleanup_interval: Duration,
     pub rate_limit: RateLimitConfig,
     pub max_connections: usize,
+    pub max_connections_per_ip: u32,
 }
 
 impl Config {
@@ -182,6 +185,7 @@ impl Config {
                 per_sec: env_parse("PLAYLINK_MESSAGE_RATE_PER_SEC", 30.0),
             },
             max_connections: env_parse("PLAYLINK_MAX_CONNECTIONS", 256).max(1),
+            max_connections_per_ip: env_parse("PLAYLINK_MAX_CONNECTIONS_PER_IP", 8).max(1),
         }
     }
 
@@ -246,6 +250,20 @@ where
         .unwrap_or(default)
 }
 
+/// Builds the core app (API + WebSocket routes) with shared state applied. The
+/// web-console fallback and HTTP layers are added by `main` so this stays
+/// usable from tests.
+fn build_app(state: AppState) -> Router {
+    Router::new()
+        .route("/health", get(admin::health))
+        .route("/api/server", get(admin::server_info))
+        .route("/api/stats", get(admin::stats))
+        .route("/api/rooms", get(admin::list_rooms))
+        .route("/api/rooms/:room_id", get(admin::get_room))
+        .route("/ws", get(websocket::connect))
+        .with_state(state)
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
@@ -280,17 +298,11 @@ async fn main() {
         config: config.clone(),
         started_at: Instant::now(),
         connections: Arc::new(AtomicUsize::new(0)),
+        connections_per_ip: Arc::new(Mutex::new(HashMap::new())),
         shutdown: shutdown_tx.clone(),
     };
 
-    let app = Router::new()
-        .route("/health", get(admin::health))
-        .route("/api/server", get(admin::server_info))
-        .route("/api/stats", get(admin::stats))
-        .route("/api/rooms", get(admin::list_rooms))
-        .route("/api/rooms/:room_id", get(admin::get_room))
-        .route("/ws", get(websocket::connect));
-
+    let app = build_app(state);
     let app = match optional_env("PLAYLINK_WEB_DIR") {
         Some(dir) => {
             tracing::info!(%dir, "serving web console from PLAYLINK_WEB_DIR override");
@@ -305,7 +317,7 @@ async fn main() {
     let app = app
         .layer(cors_layer(&config))
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .into_make_service_with_connect_info::<SocketAddr>();
 
     let addr = config.bind_addr;
     tracing::info!(%addr, mode = %config.mode, topology = %config.server.topology, server_name = %config.server.name, "playlink server listening");
@@ -551,6 +563,135 @@ mod tests {
             cleanup_interval: Duration::from_secs(30),
             rate_limit: RateLimitConfig::default(),
             max_connections: 256,
+            max_connections_per_ip: 8,
         }
+    }
+}
+
+#[cfg(test)]
+mod ws_integration {
+    use super::*;
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
+
+    fn integration_state() -> AppState {
+        let config = Arc::new(Config {
+            bind_addr: "127.0.0.1:0".parse().unwrap(),
+            mode: "dev".to_string(),
+            server: ServerMetadata {
+                server_id: "integration".to_string(),
+                name: "integration".to_string(),
+                version: "0.1.0",
+                topology: Topology::Dedicated,
+                bind_addr: "127.0.0.1:0".parse().unwrap(),
+                websocket_path: "/ws",
+                http_url: None,
+                ws_url: None,
+                public_http_url: None,
+                public_ws_url: None,
+                discovery: DiscoveryConfig {
+                    enabled: false,
+                    method: None,
+                    port: 7778,
+                },
+            },
+            allowed_origins: vec![],
+            default_max_players: 8,
+            max_players_per_room: 16,
+            room_event_buffer: 256,
+            max_rooms: 1024,
+            max_message_bytes: 16 * 1024,
+            session_idle_timeout: Duration::from_secs(30),
+            cleanup_interval: Duration::from_secs(30),
+            rate_limit: RateLimitConfig {
+                burst: 100,
+                per_sec: 100.0,
+            },
+            max_connections: 256,
+            max_connections_per_ip: 8,
+        });
+        let rooms = Arc::new(RoomRegistry::new(RoomRegistryConfig::default()));
+        let (shutdown_tx, _) = broadcast::channel::<()>(16);
+        AppState {
+            rooms,
+            config,
+            started_at: Instant::now(),
+            connections: Arc::new(AtomicUsize::new(0)),
+            connections_per_ip: Arc::new(Mutex::new(HashMap::new())),
+            shutdown: shutdown_tx,
+        }
+    }
+
+    /// Reads from the stream until a message whose `type` matches, returning it.
+    async fn expect_message<S>(stream: &mut S, expected_type: &str) -> serde_json::Value
+    where
+        S: StreamExt<Item = Result<WsMessage, tokio_tungstenite::tungstenite::Error>> + Unpin,
+    {
+        while let Some(message) = stream.next().await {
+            if let Ok(WsMessage::Text(text)) = message {
+                let value: serde_json::Value = serde_json::from_str(&text.to_string()).unwrap();
+                if value["type"] == expected_type {
+                    return value;
+                }
+            }
+        }
+        panic!("stream closed before receiving {expected_type}");
+    }
+
+    #[tokio::test]
+    async fn ws_create_join_broadcast_lifecycle() {
+        let app =
+            build_app(integration_state()).into_make_service_with_connect_info::<SocketAddr>();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let url = format!("ws://{addr}/ws");
+        let (mut alice, _) = connect_async(&url).await.unwrap();
+        let (mut bob, _) = connect_async(&url).await.unwrap();
+
+        // Alice creates a room.
+        alice
+            .send(WsMessage::Text(
+                r#"{"type":"create_room","payload":{"room_name":"R","max_players":4}}"#.into(),
+            ))
+            .await
+            .unwrap();
+        let room_id = expect_message(&mut alice, "room_created").await["payload"]["room_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Alice joins; she also receives her own player_joined.
+        alice
+            .send(WsMessage::Text(format!(
+                r#"{{"type":"join_room","payload":{{"room_id":"{room_id}","player_name":"Alice"}}}}"#
+            )))
+            .await
+            .unwrap();
+        let _ = expect_message(&mut alice, "room_joined").await;
+        let _ = expect_message(&mut alice, "player_joined").await;
+
+        // Bob joins; Alice observes Bob's player_joined.
+        bob.send(WsMessage::Text(format!(
+            r#"{{"type":"join_room","payload":{{"room_id":"{room_id}","player_name":"Bob"}}}}"#
+        )))
+        .await
+        .unwrap();
+        let _ = expect_message(&mut bob, "room_joined").await;
+        let bob_joined = expect_message(&mut alice, "player_joined").await;
+        assert_eq!(bob_joined["payload"]["player_name"], "Bob");
+
+        // Alice broadcasts; Bob receives it.
+        alice
+            .send(WsMessage::Text(
+                r#"{"type":"room_message","payload":{"data":{"move":"left"}}}"#.into(),
+            ))
+            .await
+            .unwrap();
+        let broadcast = expect_message(&mut bob, "room_broadcast").await;
+        assert_eq!(broadcast["payload"]["data"]["move"], "left");
     }
 }

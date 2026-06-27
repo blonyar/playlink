@@ -1,12 +1,16 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        ConnectInfo, State,
     },
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -36,6 +40,7 @@ pub async fn connect(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> Response {
     // Reject WebSocket upgrades from disallowed origins (CSWSH protection).
     // Browsers do not enforce CORS on WebSocket handshakes, so this check is
@@ -51,9 +56,10 @@ pub async fn connect(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    // Enforce the concurrent-connection cap before reserving an upgrade slot.
-    let Some(guard) = reserve_connection(&state) else {
-        tracing::warn!("rejecting websocket upgrade: connection cap reached");
+    // Enforce the concurrent-connection caps (global + per source IP) before
+    // reserving an upgrade slot.
+    let Some(guard) = reserve_connection(&state, peer.ip()) else {
+        tracing::warn!(%peer, "rejecting websocket upgrade: connection cap reached");
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
 
@@ -65,30 +71,57 @@ pub async fn connect(
         .on_upgrade(move |socket| handle_socket(socket, state, guard))
 }
 
-/// RAII guard that reserves a slot in the global connection counter and
-/// releases it on drop, so the slot is freed even if the upgrade future never
-/// runs or the connection task panics.
+/// RAII guard that reserves a slot in the global connection counter and the
+/// per-source-IP counter, releasing both on drop so slots are freed even if the
+/// upgrade future never runs or the connection task panics.
 struct ConnectionGuard {
-    counter: Arc<AtomicUsize>,
+    global: Arc<AtomicUsize>,
+    per_ip: Arc<Mutex<HashMap<IpAddr, u32>>>,
+    ip: IpAddr,
 }
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        self.counter.fetch_sub(1, Ordering::Relaxed);
+        self.global.fetch_sub(1, Ordering::Relaxed);
+        let mut map = self.per_ip.lock().expect("connections_per_ip poisoned");
+        if let Some(count) = map.get_mut(&self.ip) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                map.remove(&self.ip);
+            }
+        }
     }
 }
 
-/// Atomically reserves a connection slot, rolling back if the cap is exceeded.
-fn reserve_connection(state: &AppState) -> Option<ConnectionGuard> {
+/// Reserves a connection slot under both the global and per-IP caps, rolling
+/// back if either is exceeded. The per-IP map is updated under a brief lock.
+fn reserve_connection(state: &AppState, ip: IpAddr) -> Option<ConnectionGuard> {
     let current = state.connections.fetch_add(1, Ordering::Relaxed);
     if current >= state.config.max_connections {
         state.connections.fetch_sub(1, Ordering::Relaxed);
-        None
-    } else {
-        Some(ConnectionGuard {
-            counter: Arc::clone(&state.connections),
-        })
+        return None;
     }
+
+    {
+        let mut map = state
+            .connections_per_ip
+            .lock()
+            .expect("connections_per_ip poisoned");
+        let entry = map.entry(ip).or_insert(0);
+        *entry += 1;
+        if *entry > state.config.max_connections_per_ip {
+            *entry -= 1;
+            // Roll back the global reservation made above.
+            state.connections.fetch_sub(1, Ordering::Relaxed);
+            return None;
+        }
+    }
+
+    Some(ConnectionGuard {
+        global: Arc::clone(&state.connections),
+        per_ip: Arc::clone(&state.connections_per_ip),
+        ip,
+    })
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, _guard: ConnectionGuard) {

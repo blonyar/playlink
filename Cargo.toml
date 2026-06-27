@@ -15,3 +15,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 include_dir = "0.7"
+
+[dev-dependencies]
+tokio-tungstenite = "0.21"
