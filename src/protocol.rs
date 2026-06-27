@@ -54,6 +54,7 @@ pub enum ErrorCode {
     InvalidRoomId,
     MessageTooLarge,
     RateLimited,
+    ServerFull,
     InternalError,
 }
 

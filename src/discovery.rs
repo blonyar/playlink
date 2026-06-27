@@ -1,4 +1,7 @@
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+};
 
 use serde::{Deserialize, Serialize};
 use tokio::net::UdpSocket;
@@ -59,9 +62,22 @@ pub async fn spawn(metadata: ServerMetadata) -> io::Result<tokio::task::JoinHand
         let response = DiscoveryResponse::from_metadata(&metadata);
 
         loop {
-            let Ok((size, peer)) = socket.recv_from(&mut buffer).await else {
-                continue;
+            let (size, peer) = match socket.recv_from(&mut buffer).await {
+                Ok(received) => received,
+                Err(error) => {
+                    // A bound listening socket should not normally error; a
+                    // persistent failure would busy-loop, so stop the task.
+                    tracing::error!(%error, "discovery socket recv_from failed; stopping discovery");
+                    break;
+                }
             };
+
+            // Only answer queries from the local network so server metadata is
+            // not leaked to arbitrary internet sources when the host is exposed.
+            if !is_lan_peer(peer) {
+                tracing::debug!(%peer, "ignoring discovery query from non-LAN address");
+                continue;
+            }
 
             if !is_supported_query(&buffer[..size]) {
                 tracing::debug!(%peer, "ignoring unsupported discovery query");
@@ -88,9 +104,21 @@ fn is_supported_query(bytes: &[u8]) -> bool {
     query.message_type == DISCOVERY_QUERY_TYPE && query.version == DISCOVERY_VERSION
 }
 
+/// Whether a peer address belongs to a local network (RFC1918, loopback, or
+/// link-local). Public/internet-routable sources are rejected.
+fn is_lan_peer(peer: SocketAddr) -> bool {
+    match peer.ip() {
+        IpAddr::V4(addr) => {
+            addr.is_private() || addr.is_loopback() || addr.is_link_local() || addr.is_broadcast()
+        }
+        IpAddr::V6(addr) => addr.is_loopback() || addr.is_unicast_link_local(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 
     use super::*;
 
@@ -115,6 +143,48 @@ mod tests {
 
         assert!(!is_supported_query(&query));
         assert!(!is_supported_query(b"not json"));
+    }
+
+    #[test]
+    fn is_lan_peer_accepts_private_and_loopback() {
+        assert!(is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(192, 168, 1, 20),
+            7778
+        ))));
+        assert!(is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(10, 0, 0, 5),
+            7778
+        ))));
+        assert!(is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(127, 0, 0, 1),
+            7778
+        ))));
+        assert!(is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(169, 254, 1, 1),
+            7778
+        ))));
+    }
+
+    #[test]
+    fn is_lan_peer_rejects_public_addresses() {
+        assert!(!is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(8, 8, 8, 8),
+            7778
+        ))));
+        assert!(!is_lan_peer(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(203, 0, 113, 1),
+            7778
+        ))));
+    }
+
+    #[test]
+    fn is_lan_peer_accepts_ipv6_loopback() {
+        assert!(is_lan_peer(SocketAddr::V6(SocketAddrV6::new(
+            Ipv6Addr::LOCALHOST,
+            7778,
+            0,
+            0
+        ))));
     }
 
     #[test]

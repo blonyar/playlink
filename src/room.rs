@@ -10,13 +10,13 @@ use std::{
 use dashmap::DashMap;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
 use crate::protocol::{ErrorCode, PlaylinkError, RoomEvent};
 
 pub struct RoomRegistry {
-    rooms: DashMap<Uuid, Room>,
+    rooms: DashMap<Uuid, Arc<Room>>,
     config: RoomRegistryConfig,
     total_rooms_created: AtomicU64,
     total_messages_broadcast: AtomicU64,
@@ -25,13 +25,7 @@ pub struct RoomRegistry {
 
 impl Default for RoomRegistry {
     fn default() -> Self {
-        Self {
-            rooms: DashMap::new(),
-            config: RoomRegistryConfig::default(),
-            total_rooms_created: AtomicU64::new(0),
-            total_messages_broadcast: AtomicU64::new(0),
-            active_players: AtomicI64::new(0),
-        }
+        Self::new(RoomRegistryConfig::default())
     }
 }
 
@@ -40,6 +34,7 @@ pub struct RoomRegistryConfig {
     pub default_max_players: usize,
     pub max_players_per_room: usize,
     pub room_event_buffer: usize,
+    pub max_rooms: usize,
 }
 
 impl Default for RoomRegistryConfig {
@@ -48,6 +43,7 @@ impl Default for RoomRegistryConfig {
             default_max_players: 8,
             max_players_per_room: 16,
             room_event_buffer: 256,
+            max_rooms: 1024,
         }
     }
 }
@@ -59,7 +55,7 @@ pub struct Room {
     pub max_players: usize,
     pub created_at_unix_secs: u64,
     message_count: AtomicU64,
-    state: Arc<Mutex<RoomState>>,
+    state: Arc<RwLock<RoomState>>,
     events: broadcast::Sender<RoomEvent>,
 }
 
@@ -109,6 +105,7 @@ impl RoomRegistry {
             default_max_players: config.default_max_players.max(1),
             max_players_per_room: config.max_players_per_room.max(1),
             room_event_buffer: config.room_event_buffer.max(1),
+            max_rooms: config.max_rooms.max(1),
         };
         Self {
             rooms: DashMap::new(),
@@ -134,14 +131,16 @@ impl RoomRegistry {
     }
 
     async fn cleanup_empty_rooms(&self) {
-        let rooms: Vec<(Uuid, Arc<Mutex<RoomState>>)> = self
+        // Clone the Arc<Room> handles out of the DashMap so no shard read-lock is
+        // held across the per-room state-mutex await below.
+        let rooms: Vec<Arc<Room>> = self
             .rooms
             .iter()
-            .map(|entry| (*entry.key(), entry.value().state.clone()))
+            .map(|entry| Arc::clone(entry.value()))
             .collect();
-        for (id, state) in rooms {
+        for room in rooms {
             let should_remove = {
-                let mut state = state.lock().await;
+                let mut state = room.state.write().await;
                 let empty = state.players.is_empty();
                 if empty {
                     state.removing = true;
@@ -149,13 +148,26 @@ impl RoomRegistry {
                 empty
             };
             if should_remove {
-                self.rooms.remove(&id);
-                tracing::debug!(room_id = %id, "removed empty room via cleanup task");
+                self.rooms.remove(&room.id);
+                tracing::debug!(room_id = %room.id, "removed empty room via cleanup task");
             }
         }
     }
 
-    pub fn create_room(&self, name: Option<String>, max_players: Option<usize>) -> Uuid {
+    pub fn create_room(
+        &self,
+        name: Option<String>,
+        max_players: Option<usize>,
+    ) -> Result<Uuid, PlaylinkError> {
+        // Soft cap: prevents unbounded room growth / memory exhaustion via
+        // create_room flooding. A burst may transiently exceed this by a small
+        // margin, which is acceptable for DoS protection.
+        if self.rooms.len() >= self.config.max_rooms {
+            return Err(PlaylinkError::new(
+                ErrorCode::ServerFull,
+                "Server has reached its room capacity",
+            ));
+        }
         let id = Uuid::new_v4();
         let max_players = max_players
             .unwrap_or(self.config.default_max_players)
@@ -165,19 +177,19 @@ impl RoomRegistry {
 
         self.rooms.insert(
             id,
-            Room {
+            Arc::new(Room {
                 id,
                 name: name.unwrap_or_else(|| "Untitled Room".to_string()),
                 max_players,
                 created_at_unix_secs,
                 message_count: AtomicU64::new(0),
-                state: Arc::new(Mutex::new(RoomState::default())),
+                state: Arc::new(RwLock::new(RoomState::default())),
                 events,
-            },
+            }),
         );
         self.total_rooms_created.fetch_add(1, Ordering::Relaxed);
 
-        id
+        Ok(id)
     }
 
     pub async fn join_room(
@@ -185,14 +197,12 @@ impl RoomRegistry {
         room_id: Uuid,
         player: Player,
     ) -> Result<broadcast::Receiver<RoomEvent>, PlaylinkError> {
-        let room = self
-            .rooms
-            .get(&room_id)
-            .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
+        // Drop the DashMap shard read-guard before awaiting the room state mutex.
+        let room = self.acquire_room(room_id)?;
 
         let receiver = room.events.subscribe();
         {
-            let mut state = room.state.lock().await;
+            let mut state = room.state.write().await;
 
             if state.removing {
                 return Err(PlaylinkError::new(
@@ -213,8 +223,9 @@ impl RoomRegistry {
             }
 
             state.players.insert(player.id, player.clone());
+            // Counted under the same lock as the player set so stats stay consistent.
+            self.active_players.fetch_add(1, Ordering::Relaxed);
         }
-        self.active_players.fetch_add(1, Ordering::Relaxed);
 
         room.publish(RoomEvent::PlayerJoined {
             player_id: player.id,
@@ -225,30 +236,29 @@ impl RoomRegistry {
     }
 
     pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
-        let should_remove = if let Some(room) = self.rooms.get(&room_id) {
-            let (player_removed, room_empty) = {
-                let mut state = room.state.lock().await;
-                let player_removed = state.players.remove(&player_id).is_some();
-                let room_empty = state.players.is_empty();
-                if player_removed {
-                    self.active_players.fetch_sub(1, Ordering::Relaxed);
-                }
-                if room_empty {
-                    state.removing = true;
-                }
-                (player_removed, room_empty)
-            };
-
-            if player_removed {
-                room.publish(RoomEvent::PlayerLeft { player_id });
-            }
-
-            room_empty
-        } else {
-            false
+        // Drop the DashMap shard read-guard before awaiting the room state mutex.
+        let Some(room) = self.get_room(&room_id) else {
+            return;
         };
 
-        if should_remove {
+        let (player_removed, room_empty) = {
+            let mut state = room.state.write().await;
+            let player_removed = state.players.remove(&player_id).is_some();
+            let room_empty = state.players.is_empty();
+            if player_removed {
+                self.active_players.fetch_sub(1, Ordering::Relaxed);
+            }
+            if room_empty {
+                state.removing = true;
+            }
+            (player_removed, room_empty)
+        };
+
+        if player_removed {
+            room.publish(RoomEvent::PlayerLeft { player_id });
+        }
+
+        if room_empty {
             self.rooms.remove(&room_id);
         }
     }
@@ -259,13 +269,11 @@ impl RoomRegistry {
         from: Uuid,
         data: Value,
     ) -> Result<(), PlaylinkError> {
-        let room = self
-            .rooms
-            .get(&room_id)
-            .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
+        // Drop the DashMap shard read-guard before awaiting the room state mutex.
+        let room = self.acquire_room(room_id)?;
 
         {
-            let state = room.state.lock().await;
+            let state = room.state.read().await;
             if state.removing || !state.players.contains_key(&from) {
                 return Err(PlaylinkError::new(
                     ErrorCode::NotInRoom,
@@ -282,31 +290,22 @@ impl RoomRegistry {
     }
 
     pub async fn snapshots(&self) -> Vec<RoomSnapshot> {
-        let rooms: Vec<_> = self
+        let rooms: Vec<Arc<Room>> = self
             .rooms
             .iter()
-            .map(|room| {
-                (
-                    room.id,
-                    room.name.clone(),
-                    room.max_players,
-                    room.created_at_unix_secs,
-                    room.message_count.load(Ordering::Relaxed),
-                    room.state.clone(),
-                )
-            })
+            .map(|entry| Arc::clone(entry.value()))
             .collect();
 
         let mut snapshots = Vec::with_capacity(rooms.len());
-        for (id, name, max_players, created_at_unix_secs, message_count, state) in rooms {
-            let state = state.lock().await;
+        for room in rooms {
+            let state = room.state.read().await;
             snapshots.push(RoomSnapshot {
-                id,
-                name,
-                max_players,
+                id: room.id,
+                name: room.name.clone(),
+                max_players: room.max_players,
                 player_count: state.players.len(),
-                created_at_unix_secs,
-                message_count,
+                created_at_unix_secs: room.created_at_unix_secs,
+                message_count: room.message_count.load(Ordering::Relaxed),
             });
         }
 
@@ -314,8 +313,9 @@ impl RoomRegistry {
     }
 
     pub async fn detail(&self, room_id: Uuid) -> Option<RoomDetail> {
-        let room = self.rooms.get(&room_id)?;
-        let state = room.state.lock().await;
+        // Drop the DashMap shard read-guard before awaiting the room state mutex.
+        let room = self.get_room(&room_id)?;
+        let state = room.state.read().await;
         Some(RoomDetail {
             id: room.id,
             name: room.name.clone(),
@@ -333,6 +333,24 @@ impl RoomRegistry {
             total_rooms_created: self.total_rooms_created.load(Ordering::Relaxed),
             total_messages_broadcast: self.total_messages_broadcast.load(Ordering::Relaxed),
         }
+    }
+
+    /// Looks up a room and clones its `Arc` handle out of the DashMap guard,
+    /// returning an error if the room does not exist. The guard is released
+    /// before this function returns so callers never hold it across an await.
+    fn acquire_room(&self, room_id: Uuid) -> Result<Arc<Room>, PlaylinkError> {
+        let entry = self
+            .rooms
+            .get(&room_id)
+            .ok_or_else(|| PlaylinkError::new(ErrorCode::RoomNotFound, "Room not found"))?;
+        Ok(Arc::clone(entry.value()))
+    }
+
+    /// Same as [`acquire_room`] but returns `Option` for callers that treat a
+    /// missing room as a no-op rather than an error.
+    fn get_room(&self, room_id: &Uuid) -> Option<Arc<Room>> {
+        let entry = self.rooms.get(room_id)?;
+        Some(Arc::clone(entry.value()))
     }
 }
 
@@ -363,15 +381,25 @@ mod tests {
         }
     }
 
+    fn config(max_rooms: usize) -> RoomRegistryConfig {
+        RoomRegistryConfig {
+            default_max_players: 8,
+            max_players_per_room: 16,
+            room_event_buffer: 256,
+            max_rooms,
+        }
+    }
+
     #[tokio::test]
     async fn room_registry_new_clamps_zero_config_values_to_one() {
         let registry = RoomRegistry::new(RoomRegistryConfig {
             default_max_players: 0,
             max_players_per_room: 0,
             room_event_buffer: 0,
+            max_rooms: 0,
         });
 
-        let room_id = registry.create_room(None, None);
+        let room_id = registry.create_room(None, None).unwrap();
         let detail = registry.detail(room_id).await.unwrap();
         assert_eq!(detail.max_players, 1);
 
@@ -384,13 +412,29 @@ mod tests {
             default_max_players: 8,
             max_players_per_room: 3,
             room_event_buffer: 16,
+            max_rooms: 1024,
         });
 
-        let room_id = registry.create_room(Some("Lobby".to_string()), Some(99));
+        let room_id = registry
+            .create_room(Some("Lobby".to_string()), Some(99))
+            .unwrap();
         let detail = registry.detail(room_id).await.unwrap();
 
         assert_eq!(detail.name, "Lobby");
         assert_eq!(detail.max_players, 3);
+    }
+
+    #[tokio::test]
+    async fn create_room_refuses_once_room_capacity_is_reached() {
+        let registry = RoomRegistry::new(config(1));
+
+        let first = registry.create_room(None, None);
+        let second = registry.create_room(None, None);
+
+        assert!(first.is_ok());
+        let error = second.unwrap_err();
+        assert_eq!(error.code, ErrorCode::ServerFull);
+        assert_eq!(error.message, "Server has reached its room capacity");
     }
 
     #[tokio::test]
@@ -408,7 +452,7 @@ mod tests {
     #[tokio::test]
     async fn join_room_adds_player_and_updates_detail() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(2));
+        let room_id = registry.create_room(None, Some(2)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
 
@@ -423,7 +467,7 @@ mod tests {
     #[tokio::test]
     async fn join_room_publishes_player_joined_event() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(2));
+        let room_id = registry.create_room(None, Some(2)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
 
@@ -448,7 +492,7 @@ mod tests {
     #[tokio::test]
     async fn join_room_rejects_when_room_is_full() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(1));
+        let room_id = registry.create_room(None, Some(1)).unwrap();
 
         registry.join_room(room_id, player("Alice")).await.unwrap();
         let error = registry
@@ -463,7 +507,7 @@ mod tests {
     #[tokio::test]
     async fn leave_room_removes_empty_room() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(1));
+        let room_id = registry.create_room(None, Some(1)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
 
@@ -476,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn leave_room_keeps_room_when_other_players_remain() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(2));
+        let room_id = registry.create_room(None, Some(2)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
         let bob = player("Bob");
@@ -494,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn leave_room_cleanup_is_idempotent() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(2));
+        let room_id = registry.create_room(None, Some(2)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
         let bob = player("Bob");
@@ -520,7 +564,7 @@ mod tests {
     #[tokio::test]
     async fn broadcast_publishes_room_message_event() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(1));
+        let room_id = registry.create_room(None, Some(1)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
         let mut receiver = registry.join_room(room_id, alice).await.unwrap();
@@ -547,7 +591,7 @@ mod tests {
     #[tokio::test]
     async fn broadcast_increments_room_and_registry_message_counts() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(1));
+        let room_id = registry.create_room(None, Some(1)).unwrap();
         let alice = player("Alice");
         let alice_id = alice.id;
         let mut receiver = registry.join_room(room_id, alice).await.unwrap();
@@ -573,7 +617,9 @@ mod tests {
     async fn create_room_tracks_created_at_and_total_created() {
         let registry = RoomRegistry::default();
         let before = current_unix_secs();
-        let room_id = registry.create_room(Some("Stats".to_string()), Some(2));
+        let room_id = registry
+            .create_room(Some("Stats".to_string()), Some(2))
+            .unwrap();
         let after = current_unix_secs();
 
         let detail = registry.detail(room_id).await.unwrap();
@@ -589,8 +635,12 @@ mod tests {
     #[tokio::test]
     async fn stats_include_active_room_and_player_counts() {
         let registry = RoomRegistry::default();
-        let room_a = registry.create_room(Some("A".to_string()), Some(4));
-        let room_b = registry.create_room(Some("B".to_string()), Some(4));
+        let room_a = registry
+            .create_room(Some("A".to_string()), Some(4))
+            .unwrap();
+        let room_b = registry
+            .create_room(Some("B".to_string()), Some(4))
+            .unwrap();
 
         registry.join_room(room_a, player("A1")).await.unwrap();
         registry.join_room(room_a, player("A2")).await.unwrap();
@@ -605,7 +655,7 @@ mod tests {
     #[tokio::test]
     async fn broadcast_rejects_sender_that_is_not_in_room() {
         let registry = RoomRegistry::default();
-        let room_id = registry.create_room(None, Some(1));
+        let room_id = registry.create_room(None, Some(1)).unwrap();
         let error = registry
             .broadcast(room_id, Uuid::new_v4(), json!({ "move": "left" }))
             .await
@@ -618,8 +668,12 @@ mod tests {
     #[tokio::test]
     async fn snapshots_include_room_player_counts() {
         let registry = RoomRegistry::default();
-        let room_a = registry.create_room(Some("A".to_string()), Some(4));
-        let room_b = registry.create_room(Some("B".to_string()), Some(4));
+        let room_a = registry
+            .create_room(Some("A".to_string()), Some(4))
+            .unwrap();
+        let room_b = registry
+            .create_room(Some("B".to_string()), Some(4))
+            .unwrap();
 
         registry.join_room(room_a, player("A1")).await.unwrap();
         registry.join_room(room_a, player("A2")).await.unwrap();

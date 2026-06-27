@@ -248,6 +248,9 @@ node --check examples/js-client/mini-game-server.js
 node --check web-console/assets/app.js
 node --check examples/js-client/smoke.js
 node --check examples/js-client/errors.js
+node --check examples/js-client/state-sync.js
+node --check examples/js-client/idle-timeout.js
+node --check examples/js-client/discover-lan.js
 ```
 
 For changes that need a running server, also run the relevant integration scripts:

@@ -27,7 +27,7 @@ const translations = {
 
 const elements = {
   languageSelect: document.querySelector('#language-select'), translatable: document.querySelectorAll('[data-i18n]'), tabs: document.querySelectorAll('.tab'), panels: document.querySelectorAll('.tab-panel'), refreshButton: document.querySelector('#refresh-button'),
-  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverUptime: document.querySelector('#server-uptime'), totalRoomsCreated: document.querySelector('#total-rooms-created'), totalMessagesBroadcast: document.querySelector('#total-messages-broadcast'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'), keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
+  healthStatus: document.querySelector('#health-status'), serverVersion: document.querySelector('#server-version'), roomCount: document.querySelector('#room-count'), playerCount: document.querySelector('#player-count'), wsState: document.querySelector('#ws-state'), serverUptime: document.querySelector('#server-uptime'), totalRoomsCreated: document.querySelector('#total-rooms-created'), totalMessagesBroadcast: document.querySelector('#total-messages-broadcast'), serverName: document.querySelector('#server-name'), serverTopology: document.querySelector('#server-topology'), serverBindAddr: document.querySelector('#server-bind-addr'), serverPublicHttpUrl: document.querySelector('#server-public-http-url'), serverWsPath: document.querySelector('#server-ws-path'), serverDiscovery: document.querySelector('#server-discovery'),   keepaliveState: document.querySelector('#keepalive-state'), currentPlayer: document.querySelector('#current-player'), currentRoom: document.querySelector('#current-room'), messageCurrentRoom: document.querySelector('#message-current-room'), messageRoomStatus: document.querySelector('#message-room-status'), workflowConnect: document.querySelector('#workflow-connect'), workflowRoom: document.querySelector('#workflow-room'), workflowMessage: document.querySelector('#workflow-message'),
   roomsRefreshButton: document.querySelector('#rooms-refresh-button'), roomsBody: document.querySelector('#rooms-body'), roomSearch: document.querySelector('#room-search'), roomFilter: document.querySelector('#room-filter'), selectedRoomId: document.querySelector('#selected-room-id'), selectedRoomName: document.querySelector('#selected-room-name'), selectedRoomCount: document.querySelector('#selected-room-count'), selectedRoomMessages: document.querySelector('#selected-room-messages'), selectedRoomCreatedAt: document.querySelector('#selected-room-created-at'), selectedRoomPlayers: document.querySelector('#selected-room-players'), openCreateRoomButton: document.querySelector('#open-create-room-button'), createRoomDialog: document.querySelector('#create-room-dialog'), closeCreateRoomButton: document.querySelector('#close-create-room-button'),
   wsUrl: document.querySelector('#ws-url'), connectButton: document.querySelector('#connect-button'), disconnectButton: document.querySelector('#disconnect-button'), leaveRoomButton: document.querySelector('#leave-room-button'), roomName: document.querySelector('#room-name'), maxPlayers: document.querySelector('#max-players'), createRoomButton: document.querySelector('#create-room-button'),
   playerName: document.querySelector('#player-name'), messagePayload: document.querySelector('#message-payload'), payloadValidation: document.querySelector('#payload-validation'), sendMessageButton: document.querySelector('#send-message-button'), sampleChatButton: document.querySelector('#sample-chat-button'), sampleMoveButton: document.querySelector('#sample-move-button'), pingButton: document.querySelector('#ping-button'), clearLogButton: document.querySelector('#clear-log-button'), messageLog: document.querySelector('#message-log'),
@@ -128,7 +128,9 @@ function updateWorkflowState() {
 function renderSessionState() {
   elements.currentPlayer.textContent = socket ? (elements.playerName.value.trim() || 'debug-player') : '-';
   elements.currentRoom.textContent = currentRoomId ?? '-';
-  elements.messageCurrentRoom.textContent = currentRoomId ?? '-';
+  const hasRoom = Boolean(currentRoomId);
+  elements.messageCurrentRoom.textContent = hasRoom ? currentRoomId : '—';
+  elements.messageRoomStatus.className = `room-status${hasRoom ? ' joined' : ''}`;
   updateWorkflowState();
 }
 
@@ -389,7 +391,13 @@ function connect() {
   });
 
   socket.addEventListener('message', (event) => {
-    const message = JSON.parse(event.data);
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch (error) {
+      log('error', `Failed to parse server message: ${error.message}`);
+      return;
+    }
     log('received', message);
     if (message.type === 'error') {
       const code = message.payload?.code ?? 'unknown_error';
@@ -468,7 +476,14 @@ function send(message) {
 }
 
 function createRoom() {
-  send({ type: 'create_room', payload: { room_name: elements.roomName.value || undefined, max_players: Number(elements.maxPlayers.value) || undefined } });
+  const maxPlayersValue = Number(elements.maxPlayers.value);
+  send({
+    type: 'create_room',
+    payload: {
+      room_name: elements.roomName.value || undefined,
+      max_players: Number.isInteger(maxPlayersValue) && maxPlayersValue > 0 ? maxPlayersValue : undefined,
+    },
+  });
 }
 
 function joinRoom(roomId) {

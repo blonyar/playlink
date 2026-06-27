@@ -24,12 +24,13 @@ var members: Array[Dictionary] = []
 
 @export var ws_url: String = "ws://localhost:7777/ws"
 @export var connect_timeout: float = 5.0
+@export var keepalive_interval: float = 10.0
 
 var _socket: WebSocketPeer
 var _connect_timer: float = 0.0
+var _keepalive_timer: float = 0.0
 var _connecting: bool = false
 var _request_id: int = 0
-var _pending: Dictionary = {}
 
 # ─ Public API ──────────────────────────────────────────
 
@@ -43,11 +44,14 @@ func connect_to_server(url: String = "") -> void:
 	var err := _socket.connect_to_url(ws_url)
 	if err != OK:
 		push_error("PlaylinkClient: failed to connect - ", error_string(err))
+		is_connected = false
+		_socket = null
 		emit_signal("connection_failed")
 		return
 
 	_connecting = true
 	_connect_timer = 0.0
+	_keepalive_timer = 0.0
 	set_process(true)
 
 
@@ -60,7 +64,7 @@ func disconnect_from_server() -> void:
 	_reset_state()
 
 
-func create_room(room_name: String = "", max_players: int = 4) -> void:
+func create_room(room_name: String = "", max_players: int = 8) -> void:
 	_send_request("create_room", {
 		room_name = room_name if room_name else "%s's room" % player_name,
 		max_players = max_players,
@@ -104,6 +108,9 @@ func _process(delta: float) -> void:
 			push_error("PlaylinkClient: connection timed out")
 			_socket.close()
 			_connecting = false
+			is_connected = false
+			_socket = null
+			_reset_state()
 			emit_signal("connection_failed")
 		return
 
@@ -111,6 +118,7 @@ func _process(delta: float) -> void:
 		if _connecting:
 			_connecting = false
 			is_connected = true
+			_keepalive_timer = 0.0
 			emit_signal("connected")
 
 		while _socket.get_available_packet_count() > 0:
@@ -118,9 +126,18 @@ func _process(delta: float) -> void:
 			var text := pkt.get_string_from_utf8()
 			_parse_message(text)
 
-	elif state in [WebSocketPeer.STATE_CLOSED]:
+		# The server closes idle sessions, so send a periodic ping to stay alive.
+		_keepalive_timer += delta
+		if _keepalive_timer >= keepalive_interval:
+			_keepalive_timer = 0.0
+			_send_message({ type = "ping" })
+
+	elif state in [WebSocketPeer.STATE_CLOSING, WebSocketPeer.STATE_CLOSED]:
 		if _connecting:
 			_connecting = false
+			is_connected = false
+			_socket = null
+			_reset_state()
 			emit_signal("connection_failed")
 		elif is_connected:
 			is_connected = false
@@ -135,17 +152,24 @@ func _send_request(msg_type: String, payload: Variant = null) -> void:
 	var msg: Dictionary = { type = msg_type, id = id }
 	if payload != null:
 		msg.payload = payload
-	_pending[id] = msg_type
 	_send_message(msg)
 
 
 func _send_message(msg: Dictionary) -> void:
 	if not _socket or _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		push_warning("PlaylinkClient: not connected")
+		push_error("PlaylinkClient: not connected")
+		emit_signal("error_received", "not_connected", "Not connected to server")
 		return
 
 	var text := JSON.stringify(msg)
-	_socket.send_text(text)
+	if text.is_empty():
+		push_error("PlaylinkClient: failed to serialize message")
+		emit_signal("error_received", "serialize_failed", "Failed to serialize message")
+		return
+	var err := _socket.send_text(text)
+	if err != OK:
+		push_error("PlaylinkClient: failed to send message - ", error_string(err))
+		emit_signal("error_received", "send_failed", error_string(err))
 
 
 func _parse_message(text: String) -> void:
@@ -155,17 +179,17 @@ func _parse_message(text: String) -> void:
 		push_error("PlaylinkClient: invalid JSON - ", json.get_error_message())
 		return
 
-	var msg: Dictionary = json.get_data()
+	var parsed: Variant = json.get_data()
+	if not parsed is Dictionary:
+		push_error("PlaylinkClient: message is not a JSON object")
+		return
+
+	var msg: Dictionary = parsed
 	if not msg.has("type"):
 		return
 
 	var msg_type: String = msg.type
 	var payload: Dictionary = msg.get("payload", {})
-	var msg_id: String = msg.get("id", "")
-
-	# Handle response correlation
-	if msg_id and msg_id in _pending:
-		_pending.erase(msg_id)
 
 	# Dispatch by type
 	match msg_type:
@@ -211,6 +235,6 @@ func _reset_state() -> void:
 	room_id = ""
 	player_name = ""
 	members = []
-	_pending = {}
 	_request_id = 0
+	_keepalive_timer = 0.0
 	set_process(false)

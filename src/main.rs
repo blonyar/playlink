@@ -7,29 +7,45 @@ mod websocket;
 
 use std::{
     net::SocketAddr,
-    sync::Arc,
+    path::Path,
+    sync::{atomic::AtomicUsize, Arc},
     time::{Duration, Instant},
 };
 
+use tokio::sync::broadcast;
+
 use axum::{
-    http::{HeaderValue, Method},
+    body::Body,
+    extract::OriginalUri,
+    http::{header, HeaderValue, Method, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
+use include_dir::{include_dir, Dir};
 use room::{RoomRegistry, RoomRegistryConfig};
 use serde::Serialize;
+use session::RateLimitConfig;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
     trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
+
+/// Web console assets embedded into the binary at compile time so the server
+/// has no runtime dependency on the source tree. Overridden at runtime by the
+/// `PLAYLINK_WEB_DIR` environment variable for local development.
+static WEB_CONSOLE: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/web-console");
 
 #[derive(Clone)]
 pub struct AppState {
     rooms: Arc<RoomRegistry>,
     config: Arc<Config>,
     started_at: Instant,
+    connections: Arc<AtomicUsize>,
+    shutdown: broadcast::Sender<()>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -95,8 +111,12 @@ pub struct Config {
     pub default_max_players: usize,
     pub max_players_per_room: usize,
     pub room_event_buffer: usize,
+    pub max_rooms: usize,
     pub max_message_bytes: usize,
     pub session_idle_timeout: Duration,
+    pub cleanup_interval: Duration,
+    pub rate_limit: RateLimitConfig,
+    pub max_connections: usize,
 }
 
 impl Config {
@@ -107,8 +127,12 @@ impl Config {
         let discovery_port = env_parse("PLAYLINK_DISCOVERY_PORT", 7778);
         let server_name =
             std::env::var("PLAYLINK_SERVER_NAME").unwrap_or_else(|_| "Playlink Server".to_string());
+        // A random per-process instance id guarantees a unique server_id even
+        // when name/topology/bind_addr collide across machines. Operators who
+        // need a stable id can set PLAYLINK_SERVER_ID explicitly.
+        let instance_id = Uuid::new_v4();
         let server_id = std::env::var("PLAYLINK_SERVER_ID")
-            .unwrap_or_else(|_| format!("playlink:{server_name}:{topology}:{bind_addr}"));
+            .unwrap_or_else(|_| format!("playlink:{server_name}:{topology}:{instance_id}"));
         let public_http_url = optional_env("PLAYLINK_PUBLIC_HTTP_URL");
         let public_ws_url = optional_env("PLAYLINK_PUBLIC_WS_URL");
 
@@ -146,11 +170,49 @@ impl Config {
             default_max_players: env_parse("PLAYLINK_DEFAULT_MAX_PLAYERS", 8).max(1),
             max_players_per_room: env_parse("PLAYLINK_MAX_PLAYERS_PER_ROOM", 16).max(1),
             room_event_buffer: env_parse("PLAYLINK_ROOM_EVENT_BUFFER", 256).max(1),
-            max_message_bytes: env_parse("PLAYLINK_MAX_MESSAGE_BYTES", 16 * 1024),
+            max_rooms: env_parse("PLAYLINK_MAX_ROOMS", 1024).max(1),
+            max_message_bytes: env_parse("PLAYLINK_MAX_MESSAGE_BYTES", 16 * 1024).max(256),
             session_idle_timeout: Duration::from_secs(env_parse(
                 "PLAYLINK_SESSION_IDLE_TIMEOUT_SECS",
                 30,
             )),
+            cleanup_interval: Duration::from_secs(env_parse("PLAYLINK_CLEANUP_INTERVAL_SECS", 30)),
+            rate_limit: RateLimitConfig {
+                burst: env_parse("PLAYLINK_MESSAGE_BURST", 30),
+                per_sec: env_parse("PLAYLINK_MESSAGE_RATE_PER_SEC", 30.0),
+            },
+            max_connections: env_parse("PLAYLINK_MAX_CONNECTIONS", 256).max(1),
+        }
+    }
+
+    /// Whether a WebSocket `Origin` header is allowed to upgrade. In `prod`
+    /// mode the origin must match `allowed_origins`; in other modes all origins
+    /// are accepted (mirroring the HTTP CORS policy).
+    pub fn is_origin_allowed(&self, origin: Option<&str>) -> bool {
+        if self.mode != "prod" {
+            return true;
+        }
+        match origin {
+            Some(origin) => self.allowed_origins.iter().any(|allowed| allowed == origin),
+            None => false,
+        }
+    }
+
+    /// Logs warnings for suspicious or contradictory configuration. Advisory
+    /// only — individual values are clamped in `from_env`; this surfaces
+    /// combinations that parse but are likely wrong.
+    pub fn validate(&self) {
+        if self.default_max_players > self.max_players_per_room {
+            tracing::warn!(
+                default_max_players = self.default_max_players,
+                max_players_per_room = self.max_players_per_room,
+                "default_max_players exceeds max_players_per_room; new rooms will be clamped down"
+            );
+        }
+        if self.mode == "prod" && self.allowed_origins.is_empty() {
+            tracing::warn!(
+                "PLAYLINK_MODE=prod but PLAYLINK_ALLOWED_ORIGINS is empty; no browser origins will be allowed"
+            );
         }
     }
 }
@@ -194,7 +256,9 @@ async fn main() {
         .init();
 
     let config = Arc::new(Config::from_env());
-    let _discovery_task = if config.server.discovery.enabled {
+    config.validate();
+    let (shutdown_tx, _) = broadcast::channel::<()>(16);
+    let discovery_task = if config.server.discovery.enabled {
         Some(
             discovery::spawn(config.server.clone())
                 .await
@@ -208,14 +272,16 @@ async fn main() {
         default_max_players: config.default_max_players,
         max_players_per_room: config.max_players_per_room,
         room_event_buffer: config.room_event_buffer,
+        max_rooms: config.max_rooms,
     }));
-    let _cleanup_task = rooms.spawn_cleanup_task(Duration::from_secs(30));
+    let cleanup_task = rooms.spawn_cleanup_task(config.cleanup_interval);
     let state = AppState {
         rooms,
         config: config.clone(),
         started_at: Instant::now(),
+        connections: Arc::new(AtomicUsize::new(0)),
+        shutdown: shutdown_tx.clone(),
     };
-    let web_console_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web-console");
 
     let app = Router::new()
         .route("/health", get(admin::health))
@@ -223,11 +289,20 @@ async fn main() {
         .route("/api/stats", get(admin::stats))
         .route("/api/rooms", get(admin::list_rooms))
         .route("/api/rooms/:room_id", get(admin::get_room))
-        .route("/ws", get(websocket::connect))
-        .nest_service(
-            "/",
-            ServeDir::new(web_console_dir).append_index_html_on_directories(true),
-        )
+        .route("/ws", get(websocket::connect));
+
+    let app = match optional_env("PLAYLINK_WEB_DIR") {
+        Some(dir) => {
+            tracing::info!(%dir, "serving web console from PLAYLINK_WEB_DIR override");
+            app.nest_service(
+                "/",
+                ServeDir::new(dir).append_index_html_on_directories(true),
+            )
+        }
+        None => app.fallback(serve_web_console),
+    };
+
+    let app = app
         .layer(cors_layer(&config))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -239,10 +314,59 @@ async fn main() {
         .await
         .expect("failed to bind server socket");
 
+    let shutdown_signal_tx = shutdown_tx.clone();
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            tracing::info!("notifying active connections to close");
+            let _ = shutdown_signal_tx.send(());
+        })
         .await
         .expect("server failed");
+
+    // Gracefully stop background tasks after HTTP shutdown completes.
+    if let Some(handle) = discovery_task {
+        handle.abort();
+    }
+    cleanup_task.abort();
+    tracing::info!("playlink server stopped");
+}
+
+/// Serves the embedded web console assets. Runs as the router fallback so it
+/// never shadows the API or WebSocket routes.
+async fn serve_web_console(OriginalUri(uri): OriginalUri) -> Response {
+    let relative = uri.path().trim_start_matches('/');
+    let file = if relative.is_empty() {
+        WEB_CONSOLE.get_file("index.html")
+    } else {
+        WEB_CONSOLE.get_file(relative)
+    };
+    let Some(file) = file else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let content_type = content_type_for(file.path());
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    (headers, Body::from(file.contents().to_vec())).into_response()
+}
+
+fn content_type_for(path: &Path) -> &'static str {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return "application/octet-stream";
+    };
+    match ext.to_ascii_lowercase().as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "js" => "application/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        _ => "application/octet-stream",
+    }
 }
 
 async fn shutdown_signal() {
@@ -316,6 +440,35 @@ mod tests {
     }
 
     #[test]
+    fn web_console_embeds_core_assets() {
+        assert!(WEB_CONSOLE.get_file("index.html").is_some());
+        assert!(WEB_CONSOLE.get_file("assets/app.js").is_some());
+        assert!(WEB_CONSOLE.get_file("assets/style.css").is_some());
+        assert!(WEB_CONSOLE.get_file("missing.html").is_none());
+    }
+
+    #[test]
+    fn content_type_maps_known_extensions() {
+        assert_eq!(
+            content_type_for(Path::new("index.html")),
+            "text/html; charset=utf-8"
+        );
+        assert_eq!(
+            content_type_for(Path::new("assets/app.js")),
+            "application/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            content_type_for(Path::new("style.css")),
+            "text/css; charset=utf-8"
+        );
+        assert_eq!(content_type_for(Path::new("favicon.ico")), "image/x-icon");
+        assert_eq!(
+            content_type_for(Path::new("noext")),
+            "application/octet-stream"
+        );
+    }
+
+    #[test]
     fn server_metadata_serializes_expected_fields() {
         let metadata = ServerMetadata {
             server_id: "test-server-id".to_string(),
@@ -346,5 +499,58 @@ mod tests {
         assert_eq!(value["public_ws_url"], "ws://127.0.0.1:7777/ws");
         assert_eq!(value["discovery"]["enabled"], true);
         assert_eq!(value["discovery"]["port"], 7778);
+    }
+
+    #[test]
+    fn is_origin_allowed_dev_accepts_anything() {
+        let config = sample_config();
+
+        assert!(config.is_origin_allowed(Some("https://evil.example")));
+        assert!(config.is_origin_allowed(None));
+    }
+
+    #[test]
+    fn is_origin_allowed_prod_requires_known_origin() {
+        let mut config = sample_config();
+        config.mode = "prod".to_string();
+        config.allowed_origins = vec!["https://game.example".to_string()];
+
+        assert!(config.is_origin_allowed(Some("https://game.example")));
+        assert!(!config.is_origin_allowed(Some("https://evil.example")));
+        assert!(!config.is_origin_allowed(None));
+    }
+
+    fn sample_config() -> Config {
+        Config {
+            bind_addr: SocketAddr::from(([0, 0, 0, 0], 7777)),
+            mode: "dev".to_string(),
+            server: ServerMetadata {
+                server_id: "id".to_string(),
+                name: "n".to_string(),
+                version: "0.1.0",
+                topology: Topology::Dedicated,
+                bind_addr: SocketAddr::from(([0, 0, 0, 0], 7777)),
+                websocket_path: "/ws",
+                http_url: None,
+                ws_url: None,
+                public_http_url: None,
+                public_ws_url: None,
+                discovery: DiscoveryConfig {
+                    enabled: false,
+                    method: None,
+                    port: 7778,
+                },
+            },
+            allowed_origins: vec![],
+            default_max_players: 8,
+            max_players_per_room: 16,
+            room_event_buffer: 256,
+            max_rooms: 1024,
+            max_message_bytes: 16 * 1024,
+            session_idle_timeout: Duration::from_secs(30),
+            cleanup_interval: Duration::from_secs(30),
+            rate_limit: RateLimitConfig::default(),
+            max_connections: 256,
+        }
     }
 }

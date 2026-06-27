@@ -350,6 +350,8 @@ node --check web-console/assets/app.js
 node --check examples/js-client/smoke.js
 node --check examples/js-client/errors.js
 node --check examples/js-client/state-sync.js
+node --check examples/js-client/idle-timeout.js
+node --check examples/js-client/discover-lan.js
 ```
 
 With the server running:
