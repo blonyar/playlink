@@ -38,6 +38,8 @@ http://127.0.0.1:7780/
 
 For all runnable checks and demos, see `docs/demo-guide.md`.
 
+For a hands-on walkthrough that ends in a deployed two-player chat and a movement demo, see `docs/TUTORIAL.md`.
+
 Run the full local verification suite:
 
 ```powershell
@@ -380,8 +382,10 @@ npm run idle-timeout
 
 ## Documentation Map
 
+- `docs/TUTORIAL.md` — **start here**: hands-on walkthrough from `cargo run` to a deployed two-player chat with movement sync
 - `docs/protocol.md` — WebSocket JSON protocol and error codes
 - `docs/js-client-api.md` — JavaScript helper API
+- `docs/CLIENT_GUIDE.md` — writing Playlink clients in Rust
 - `docs/demo-guide.md` — runnable demos and local verification flow
 - `docs/goal.md` — long-term framework direction and work threads
 - `docs/v1.0-baseline.md` — active v1.0 baseline contracts and acceptance criteria
