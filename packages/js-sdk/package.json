@@ -1,0 +1,43 @@
+{
+  "name": "@playlink/client",
+  "version": "1.0.0",
+  "description": "Zero-dependency JavaScript client for the Playlink WebSocket room protocol.",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "types": "./types/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "types",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "test:state-snapshot": "node --test test/state-snapshot.test.mjs",
+    "test:client": "node --test test/client.test.mjs",
+    "test:reconnect": "node --test test/reconnect.test.mjs",
+    "test:messages": "node --test test/messages.test.mjs",
+    "test:utils": "node --test test/utils.test.mjs"
+  },
+  "keywords": [
+    "playlink",
+    "websocket",
+    "multiplayer",
+    "rooms",
+    "realtime",
+    "sdk"
+  ],
+  "license": "MIT",
+  "sideEffects": false
+}
