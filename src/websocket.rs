@@ -87,12 +87,43 @@ struct ConnectionGuard {
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         self.global.fetch_sub(1, Ordering::Relaxed);
-        let mut map = self.per_ip.lock().expect("connections_per_ip poisoned");
+        // The per-IP map may be poisoned if a previous task panicked
+        // while holding the lock. Recovering the inner value is the
+        // standard pattern for "the lock was held across a panic; the
+        // data we need is still there, just in an inconsistent state".
+        // For our use case the map only contains counters, so reading
+        // them after a panic is preferable to leaking the slot.
+        let mut map = match self.per_ip.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::warn!(
+                    ip = %self.ip,
+                    "connections_per_ip mutex was poisoned; recovering inner value"
+                );
+                poisoned.into_inner()
+            }
+        };
         if let Some(count) = map.get_mut(&self.ip) {
             *count = count.saturating_sub(1);
             if *count == 0 {
                 map.remove(&self.ip);
             }
+        }
+    }
+}
+
+/// Locks the per-IP connection map, recovering from poison rather than
+/// panicking. Used by both the reservation path and the guard's Drop
+/// implementation so a panic in one connection task does not lock out
+/// the rest of the server.
+fn lock_per_ip(
+    map: &Arc<Mutex<HashMap<IpAddr, u32>>>,
+) -> std::sync::MutexGuard<'_, HashMap<IpAddr, u32>> {
+    match map.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::warn!("connections_per_ip mutex was poisoned; recovering inner value");
+            poisoned.into_inner()
         }
     }
 }
@@ -107,10 +138,7 @@ fn reserve_connection(state: &AppState, ip: IpAddr) -> Option<ConnectionGuard> {
     }
 
     {
-        let mut map = state
-            .connections_per_ip
-            .lock()
-            .expect("connections_per_ip poisoned");
+        let mut map = lock_per_ip(&state.connections_per_ip);
         let entry = map.entry(ip).or_insert(0);
         *entry += 1;
         if *entry > state.config.max_connections_per_ip {
@@ -526,5 +554,71 @@ mod tests {
         assert!(validate_name("na\tme", 32).is_none());
         // Leading/trailing whitespace is trimmed away first, so it is accepted.
         assert_eq!(validate_name("\t name \n", 32).as_deref(), Some("name"));
+    }
+
+    /// `lock_per_ip` must recover the inner value if a previous task
+    /// panicked while holding the lock, rather than panicking itself
+    /// and locking out the rest of the server. The counters are simple
+    /// integers, so reading them after a poison is preferable to
+    /// leaking a slot.
+    #[test]
+    fn lock_per_ip_recovers_from_poison() {
+        let map: Arc<Mutex<HashMap<IpAddr, u32>>> = Arc::new(Mutex::new(HashMap::new()));
+        map.lock().unwrap().insert("127.0.0.1".parse().unwrap(), 1);
+
+        // Poison the mutex by panicking while the lock is held.
+        let result = std::panic::catch_unwind({
+            let map = Arc::clone(&map);
+            move || {
+                let mut guard = map.lock().unwrap();
+                guard.insert("127.0.0.1".parse().unwrap(), 99);
+                panic!("simulated task panic while holding the lock");
+            }
+        });
+        assert!(result.is_err(), "panic should propagate to catch_unwind");
+
+        // The next acquisition must succeed (returning the inner
+        // value), and the data must still be there.
+        let guard = lock_per_ip(&map);
+        assert_eq!(guard.get(&"127.0.0.1".parse().unwrap()), Some(&99));
+    }
+
+    /// Drop on a `ConnectionGuard` whose per-IP map was poisoned must
+    /// still release the global counter and decrement the per-IP entry
+    /// rather than panicking on Drop and aborting the runtime.
+    #[test]
+    fn connection_guard_drop_recovers_from_poison() {
+        let global = Arc::new(AtomicUsize::new(5));
+        let per_ip: Arc<Mutex<HashMap<IpAddr, u32>>> = Arc::new(Mutex::new(HashMap::new()));
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        per_ip.lock().unwrap().insert(ip, 3);
+
+        // Poison the per-IP mutex.
+        let _ = std::panic::catch_unwind({
+            let per_ip = Arc::clone(&per_ip);
+            move || {
+                let _g = per_ip.lock().unwrap();
+                panic!("simulated panic");
+            }
+        });
+
+        let guard = ConnectionGuard {
+            global: Arc::clone(&global),
+            per_ip: Arc::clone(&per_ip),
+            ip,
+        };
+        drop(guard);
+
+        assert_eq!(
+            global.load(Ordering::Relaxed),
+            4,
+            "global counter decremented"
+        );
+        let map = lock_per_ip(&per_ip);
+        assert_eq!(
+            map.get(&ip).copied(),
+            Some(2),
+            "per-IP counter decremented from 3 to 2"
+        );
     }
 }
