@@ -771,4 +771,72 @@ mod ws_integration {
         let response = crate::admin::stats(axum::extract::State(state)).await.0;
         assert_eq!(response.connection_count, 2);
     }
+
+    /// Locks down the invariant that a `Session` ↔ `player_id` ↔ WebSocket
+    /// connection is a strict one-to-one mapping, and that no client can
+    /// impersonate another player by injecting a `player_id` field into a
+    /// `join_room` payload. Two distinct connections must receive two
+    /// distinct server-assigned player ids even when both send the same
+    /// `player_name` and an attacker-supplied `player_id`.
+    #[tokio::test]
+    async fn join_room_assigns_distinct_server_side_player_ids() {
+        let app =
+            build_app(integration_state()).into_make_service_with_connect_info::<SocketAddr>();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let url = format!("ws://{addr}/ws");
+        let (mut alice, _) = connect_async(&url).await.unwrap();
+        let (mut bob, _) = connect_async(&url).await.unwrap();
+
+        // Alice creates a room.
+        alice
+            .send(WsMessage::Text(
+                r#"{"type":"create_room","payload":{"room_name":"invariant","max_players":4}}"#
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        let room_id = expect_message(&mut alice, "room_created").await["payload"]["room_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Alice joins, and as an attacker attempt also inject a
+        // client-supplied player_id to see if the server ever honors it.
+        alice
+            .send(WsMessage::Text(format!(
+                r#"{{"type":"join_room","payload":{{"room_id":"{room_id}","player_name":"alice","player_id":"deadbeef-dead-beef-dead-beefdeadbeef"}}}}"#
+            )))
+            .await
+            .unwrap();
+        let alice_joined = expect_message(&mut alice, "room_joined").await;
+        let alice_server_id = alice_joined["payload"]["player_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_ne!(
+            alice_server_id, "deadbeef-dead-beef-dead-beefdeadbeef",
+            "server must not honor a client-supplied player_id"
+        );
+
+        // Bob joins with the same player_name and also tries to spoof
+        // alice's id; the server must still assign a fresh UUID.
+        let _ = expect_message(&mut alice, "player_joined").await;
+        bob.send(WsMessage::Text(format!(
+            r#"{{"type":"join_room","payload":{{"room_id":"{room_id}","player_name":"alice","player_id":"{alice_server_id}"}}}}"#
+        ))).await.unwrap();
+        let bob_joined = expect_message(&mut bob, "room_joined").await;
+        let bob_server_id = bob_joined["payload"]["player_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_ne!(
+            bob_server_id, alice_server_id,
+            "server must allocate a fresh player id for each connection"
+        );
+    }
 }

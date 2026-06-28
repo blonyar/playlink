@@ -311,6 +311,15 @@ async fn handle_client_message(
                 return Ok(());
             };
 
+            // Invariant: the player id is always taken from the
+            // server-side session, never from the wire payload. The
+            // `ClientMessage::JoinRoom` variant does not even carry a
+            // player_id field, and the deserializer drops unknown
+            // fields, so a hostile client cannot inject one. This
+            // guarantees a strict one-to-one mapping between
+            // (WebSocket connection, Session, player_id) and rules
+            // out impersonation by an attacker who can craft arbitrary
+            // JSON envelopes.
             let player = Player {
                 id: session.player_id,
                 name: name.clone(),

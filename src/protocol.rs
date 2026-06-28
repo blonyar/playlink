@@ -229,6 +229,35 @@ mod tests {
     }
 
     #[test]
+    fn join_room_ignores_client_supplied_player_id_field() {
+        // Invariant: the server always assigns the player id from the
+        // session. The wire format does not carry a player_id field, and
+        // even if a hostile client injects one it must be dropped during
+        // deserialization so the server can never be tricked into using
+        // an attacker-chosen identity.
+        let envelope: ClientEnvelope = serde_json::from_value(json!({
+            "type": "join_room",
+            "payload": {
+                "room_id": "00000000-0000-0000-0000-000000000000",
+                "player_name": "Alice",
+                "player_id": "11111111-1111-1111-1111-111111111111"
+            }
+        }))
+        .unwrap();
+
+        match envelope.message {
+            ClientMessage::JoinRoom {
+                room_id,
+                player_name,
+            } => {
+                assert_eq!(room_id, "00000000-0000-0000-0000-000000000000");
+                assert_eq!(player_name, "Alice");
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
+
+    #[test]
     fn client_envelope_deserializes_room_message_with_arbitrary_json() {
         let data = json!({ "x": 1, "nested": { "ok": true } });
         let envelope: ClientEnvelope = serde_json::from_value(json!({
