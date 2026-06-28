@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playlink Tank Wars</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0a0f1c;
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    header {
+      width: 100%;
+      max-width: 960px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .status {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 14px;
+    }
+    .status > div {
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #1e293b;
+    }
+    main {
+      width: 100%;
+      max-width: 960px;
+      padding: 0 16px 16px;
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      gap: 16px;
+    }
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; }
+    }
+    canvas {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #1a2438;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      image-rendering: pixelated;
+    }
+    aside {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 14px;
+    }
+    label {
+      display: grid;
+      gap: 4px;
+    }
+    input, button {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e5e7eb;
+      font-size: 14px;
+    }
+    button {
+      background: #38bdf8;
+      color: #082f49;
+      font-weight: 700;
+      border: 0;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: #475569;
+      color: #f1f5f9;
+    }
+    .panel {
+      background: #172033;
+      border: 1px solid #2f3b52;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .help {
+      margin: 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+      line-height: 1.6;
+      font-size: 13px;
+    }
+    kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+    }
+    pre {
+      margin: 0;
+      min-height: 100px;
+      max-height: 220px;
+      overflow: auto;
+      padding: 8px;
+      background: #020617;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Playlink Tank Wars</h1>
+      <div style="font-size:13px;color:#94a3b8;">A two-player LAN tank battle on top of the Playlink v1.x WebSocket protocol.</div>
+    </div>
+    <div class="status">
+      <div>State: <strong id="state">disconnected</strong></div>
+      <div>Room: <strong id="roomId">-</strong></div>
+      <div>Players: <strong id="playerCount">0/2</strong></div>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="arena" width="800" height="800"></canvas>
+    <aside>
+      <div class="panel">
+        <h2>Connection</h2>
+        <label>
+          WebSocket URL
+          <input id="wsUrl" value="ws://localhost:7777/ws">
+        </label>
+        <label>
+          Player name
+          <input id="playerName" value="tank">
+        </label>
+        <label>
+          Room ID (leave blank to create)
+          <input id="roomIdInput" placeholder="auto-create">
+        </label>
+        <div style="display:flex;gap:6px;">
+          <button id="connectBtn" style="flex:1;">Connect</button>
+          <button id="createBtn" class="secondary" style="flex:1;" disabled>Create</button>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button id="joinBtn" class="secondary" style="flex:1;" disabled>Join</button>
+          <button id="leaveBtn" class="secondary" style="flex:1;" disabled>Leave</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Controls</h2>
+        <ul class="help">
+          <li><kbd>W</kbd> / <kbd>↑</kbd> forward</li>
+          <li><kbd>S</kbd> / <kbd>↓</kbd> reverse</li>
+          <li><kbd>A</kbd> / <kbd>←</kbd> turn left</li>
+          <li><kbd>D</kbd> / <kbd>→</kbd> turn right</li>
+          <li><kbd>Space</kbd> fire</li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h2>LAN deployment</h2>
+        <p class="help" style="margin:0;list-style:none;padding-left:0;">
+          The host runs <code style="color:#93c5fd;">cargo run</code> on one machine.
+          Other players on the same Wi-Fi set the WebSocket URL above to
+          <code style="color:#93c5fd;">ws://&lt;host-ip&gt;:7777/ws</code> and click Connect.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </div>
+    </aside>
+  </main>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "@playlink/client": "/playlink-client.js"
+      }
+    }
+  </script>
+  <script type="module" src="./tanks.js"></script>
+</body>
+</html>

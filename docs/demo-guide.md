@@ -234,7 +234,61 @@ Tab 2: Connect -> paste room ID -> Join
 Move both players and watch room_broadcast events drive remote movement
 ```
 
-## 10. Godot Client Example
+## 10. Browser Tank Wars Demo
+
+Purpose:
+
+- exercise the protocol under real game traffic: position broadcasts, bullet events, hit detection, HP, respawn
+- validate the state-snapshot helper under a 20Hz send rate
+- show a complete browser game built on `@playlink/client`
+
+In terminal 1, start Playlink:
+
+```bash
+rustup run stable cargo run
+```
+
+In terminal 2, serve the examples (this also serves the Tank Wars page):
+
+```bash
+npm --prefix examples/js-client run mini-game
+# or equivalently: npm --prefix examples/js-client run tanks
+```
+
+Open:
+
+```text
+http://127.0.0.1:7780/tanks
+```
+
+The same server also serves the mini-game at `http://127.0.0.1:7780/`.
+
+Local two-tab test:
+
+```text
+Tab 1: WebSocket URL ws://localhost:7777/ws -> Connect -> Create -> WASD to move, Space to fire
+Tab 2: WebSocket URL ws://localhost:7777/ws -> Connect -> paste the same room id -> Join
+```
+
+LAN test:
+
+```text
+1. Host runs `cargo run` on machine A.
+2. Find machine A's LAN IP (e.g. `192.168.1.20`).
+3. Player on machine B opens `http://<host-lan-ip>:7780/tanks` and sets
+   the WebSocket URL to `ws://192.168.1.20:7777/ws`.
+```
+
+What the demo does:
+
+- position, angle, and HP are broadcast via `state_snapshot` at 20 Hz
+- bullet shots are sent as `room_message` events with `kind: 'bullet'`
+- the firing client runs hit detection and emits `kind: 'hit'` events to
+  authoritative-decrement the victim's HP
+- a tank destroyed with HP = 0 respawns 1.5 seconds later
+- the canvas renders both players and active bullets each frame
+
+## 11. Godot Client Example
 
 Purpose:
 

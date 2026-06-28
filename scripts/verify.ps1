@@ -74,6 +74,7 @@ try {
         "examples/js-client/playlink-client.js",
         "examples/js-client/sdk-demo.js",
         "examples/js-client/mini-game.js",
+        "examples/js-client/tanks.js",
         "examples/js-client/mini-game-server.js",
         "web-console/assets/app.js",
         "examples/js-client/smoke.js",

@@ -338,6 +338,26 @@ While the server is running, open `http://localhost:7777/` in a browser. The con
 
 The console is bilingual (English / 中文) and lives entirely in the Rust binary via `include_dir!`. Refresh data by clicking the refresh button — there is no background polling.
 
+## 7a. A real game: Tank Wars
+
+`examples/js-client/tanks.html` is a complete two-player browser tank game that exercises everything above at once. Run it from the same `examples/js-client` directory as the mini-game:
+
+```bash
+npm --prefix examples/js-client run tanks
+# → http://127.0.0.1:7780/tanks
+```
+
+Open the page in two browser tabs (or two machines on the same LAN), set the WebSocket URL to the host's address, click Connect, then either click Create or paste a shared room id and click Join. Drive with WASD or arrow keys; press Space to fire. Tanks drop to zero HP, respawn 1.5 seconds later, and the score persists for the round.
+
+The demo uses:
+
+- `state_snapshot` for position, angle, and HP at 20 Hz.
+- `room_message` for `bullet` and `hit` events.
+- `StateSnapshotFilter` to ignore stale or out-of-order snapshots.
+- The full `PlaylinkClient` lifecycle: connect, createRoom, joinRoom, leaveRoom, automatic rejoin after reconnect.
+
+Read `tanks.js` next to `docs/TUTORIAL.md` for the full source. It is the recommended starting point when you want to build a non-trivial game on the framework.
+
 ## 8. Talking to the server without the SDK
 
 If you want to drive the protocol by hand (e.g., from a custom engine), the wire format is JSON over WebSocket:

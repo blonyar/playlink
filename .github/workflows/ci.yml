@@ -85,7 +85,7 @@ jobs:
             node_modules/@playlink/client/src/state-snapshot.js \
             node_modules/@playlink/client/src/protocol.js \
             node_modules/@playlink/client/src/utils.js \
-            smoke.js errors.js sdk-demo.js mini-game.js \
+            smoke.js errors.js sdk-demo.js mini-game.js tanks.js \
             mini-game-server.js state-sync.js idle-timeout.js \
             discover-lan.js
           do

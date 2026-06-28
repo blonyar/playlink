@@ -15,14 +15,13 @@ const contentTypes = {
   '.css': 'text/css; charset=utf-8',
 };
 
-function safePath(rootDir, urlPath) {
-  const normalized = normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, '');
-  const filePath = resolve(rootDir, normalized);
-  if (filePath !== rootDir && !filePath.startsWith(`${rootDir}${sep}`)) {
-    return null;
-  }
-  return filePath;
-}
+const pages = {
+  '/': 'mini-game.html',
+  '/mini-game': 'mini-game.html',
+  '/mini-game.html': 'mini-game.html',
+  '/tanks': 'tanks.html',
+  '/tanks.html': 'tanks.html',
+};
 
 const sdkPathMap = {
   '/playlink-client.js': 'index.js',
@@ -32,11 +31,19 @@ const sdkPathMap = {
   '/utils.js': 'utils.js',
 };
 
+function safePath(rootDir, urlPath) {
+  const normalized = normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, '');
+  const filePath = resolve(rootDir, normalized);
+  if (filePath !== rootDir && !filePath.startsWith(`${rootDir}${sep}`)) {
+    return null;
+  }
+  return filePath;
+}
+
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
-    let urlPath = url.pathname;
-    if (urlPath === '/') urlPath = '/mini-game.html';
+    const urlPath = url.pathname;
 
     // The browser's import map points `@playlink/client` at
     // `/playlink-client.js`. We serve the SDK source files directly
@@ -47,6 +54,8 @@ const server = createServer(async (request, response) => {
     let filePath;
     if (Object.hasOwn(sdkPathMap, urlPath)) {
       filePath = resolve(sdkRoot, 'src', sdkPathMap[urlPath]);
+    } else if (Object.hasOwn(pages, urlPath)) {
+      filePath = resolve(root, pages[urlPath]);
     } else {
       filePath = safePath(root, urlPath);
     }
@@ -76,6 +85,8 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Playlink mini game example: http://127.0.0.1:${port}/`);
-  console.log('Start the Playlink server separately with: rustup run stable cargo run');
+  console.log(`Playlink examples:`);
+  console.log(`  Mini game:   http://127.0.0.1:${port}/`);
+  console.log(`  Tank Wars:   http://127.0.0.1:${port}/tanks`);
+  console.log(`Start the Playlink server separately with: rustup run stable cargo run`);
 });

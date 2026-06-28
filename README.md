@@ -84,6 +84,7 @@ Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper A
 - JavaScript helper API documentation
 - SDK-style two-client demo script
 - browser mini-game using `state_snapshot` messages
+- browser Tank Wars 2-player demo (`examples/js-client/tanks.html`)
 - Rust unit tests, SDK unit tests, and JavaScript integration scripts
 - one-command verification via `.\scripts\verify.ps1` and GitHub Actions CI
 
