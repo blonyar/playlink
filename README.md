@@ -173,6 +173,7 @@ Example `/api/server` response with public URL overrides:
   "server_id": "kangs-playlink-server",
   "name": "Kang's Playlink Server",
   "version": "0.1.0",
+  "api_version": 1,
   "topology": "host",
   "bind_addr": "0.0.0.0:7777",
   "websocket_path": "/ws",

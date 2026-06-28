@@ -193,6 +193,7 @@ mod tests {
             server_id: "lan-host-id".to_string(),
             name: "LAN Host".to_string(),
             version: "0.1.0",
+            api_version: crate::API_VERSION,
             topology: Topology::Host,
             bind_addr: SocketAddr::from(([0, 0, 0, 0], 7777)),
             websocket_path: "/ws",

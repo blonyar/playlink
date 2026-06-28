@@ -90,6 +90,11 @@ pub struct ServerMetadata {
     pub server_id: String,
     pub name: String,
     pub version: &'static str,
+    /// Wire-protocol API version. Bumped only on breaking changes to the
+    /// stable message contract documented in `docs/protocol.md`. v1.1+
+    /// servers expose this field; clients that pre-date the field can
+    /// safely ignore it.
+    pub api_version: u32,
     pub topology: Topology,
     pub bind_addr: SocketAddr,
     pub websocket_path: &'static str,
@@ -103,6 +108,12 @@ pub struct ServerMetadata {
     pub public_ws_url: Option<String>,
     pub discovery: DiscoveryConfig,
 }
+
+/// Current wire-protocol API version. Exposed via
+/// `ServerMetadata::api_version` so SDK clients can negotiate before
+/// relying on a feature. The protocol contract in `docs/protocol.md` is
+/// additive, so this number only changes on breaking changes.
+pub const API_VERSION: u32 = 1;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -146,6 +157,7 @@ impl Config {
                 server_id,
                 name: server_name,
                 version: env!("CARGO_PKG_VERSION"),
+                api_version: API_VERSION,
                 topology,
                 bind_addr,
                 websocket_path: "/ws",
@@ -495,6 +507,7 @@ mod tests {
             server_id: "test-server-id".to_string(),
             name: "Test Server".to_string(),
             version: "0.1.0",
+            api_version: API_VERSION,
             topology: Topology::Host,
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 7777)),
             websocket_path: "/ws",
@@ -512,6 +525,7 @@ mod tests {
         let value = serde_json::to_value(metadata).unwrap();
         assert_eq!(value["server_id"], "test-server-id");
         assert_eq!(value["name"], "Test Server");
+        assert_eq!(value["api_version"], 1);
         assert_eq!(value["topology"], "host");
         assert_eq!(value["websocket_path"], "/ws");
         assert_eq!(value["http_url"], "http://127.0.0.1:7777");
@@ -549,6 +563,7 @@ mod tests {
                 server_id: "id".to_string(),
                 name: "n".to_string(),
                 version: "0.1.0",
+                api_version: API_VERSION,
                 topology: Topology::Dedicated,
                 bind_addr: SocketAddr::from(([0, 0, 0, 0], 7777)),
                 websocket_path: "/ws",
@@ -591,6 +606,7 @@ mod ws_integration {
                 server_id: "integration".to_string(),
                 name: "integration".to_string(),
                 version: "0.1.0",
+                api_version: API_VERSION,
                 topology: Topology::Dedicated,
                 bind_addr: "127.0.0.1:0".parse().unwrap(),
                 websocket_path: "/ws",

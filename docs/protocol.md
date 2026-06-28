@@ -339,3 +339,27 @@ Within one room, events are sent through a Tokio broadcast channel. The server p
 ## 8. Compatibility Policy
 
 The v1.0 baseline stabilizes the current JSON message names, required payload fields, room lifecycle behavior, and structured error shape. Future changes should prefer additive fields and new message types over breaking existing fields.
+
+## 9. API Versioning
+
+`GET /api/server` exposes an integer `api_version` field so SDK clients can detect protocol capabilities before relying on a feature.
+
+```json
+{
+  "server_id": "playlink:Playlink Server:dedicated:...",
+  "name": "Playlink Server",
+  "version": "0.1.0",
+  "api_version": 1,
+  "topology": "dedicated",
+  "bind_addr": "0.0.0.0:7777",
+  "websocket_path": "/ws",
+  "discovery": { "enabled": false, "method": null, "port": 7778 }
+}
+```
+
+Rules:
+
+- `api_version` is bumped only on breaking changes to the stable message contract in this document.
+- Servers with newer `api_version` than the SDK supports should be treated as a negotiation error by the client (the SDK decides what to do: warn, refuse, or attempt a fallback).
+- Servers with older `api_version` than the SDK targets are still safe to connect to as long as the client only uses documented message types from that version.
+- This number is independent of the build `version` field, which tracks the Playlink binary release.
