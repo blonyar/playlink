@@ -74,19 +74,18 @@ Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper A
 - server stats endpoint (`/api/stats`)
 - room `message_count` and `created_at_unix_secs` metadata
 - Web Debug Console with stats dashboard
-- server/network metadata endpoint
+- server/network metadata endpoint (`api_version` for SDK negotiation)
 - optional LAN discovery prototype
-- small JavaScript client helper
+- v1.1 hardening: `room_closed` event, per-IP connection cap, transport-layer frame/message size split, rate-limited messages, mutex-poison recovery, name sanitization, env-parse warnings
+- `@playlink/client` JavaScript SDK package (see `packages/js-sdk/`)
 - state snapshot helper utilities
 - JavaScript helper API documentation
 - SDK-style two-client demo script
 - browser mini-game using `state_snapshot` messages
-- Rust unit tests and JavaScript integration scripts
-- one-command verification via `.\scripts\verify.ps1`
+- Rust unit tests, SDK unit tests, and JavaScript integration scripts
+- one-command verification via `.\scripts\verify.ps1` and GitHub Actions CI
 
-See `docs/v1.0-baseline.md` for the full baseline contract.
-
-Additional hardening (transport-layer message-size enforcement, origin validation, per-session rate limiting, global and per-IP connection caps, graceful shutdown, name sanitization, RwLock broadcast concurrency, and env-parse warnings) is available on the `v0.4-lan-discovery-prototype` branch and will land in the next baseline release.
+See `docs/v1.0-baseline.md` for the baseline protocol and helper contract. See `packages/js-sdk/README.md` for the published SDK surface.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
@@ -265,16 +264,18 @@ http://localhost:7777/
 
 The console shows health, room counts, room snapshots, and a built-in WebSocket test client for creating rooms, joining rooms, sending messages, and inspecting received events.
 
-## JavaScript SDK-style Example
+## JavaScript SDK
 
-The JavaScript examples expect Node.js 20 or newer for built-in `fetch` and `WebSocket` support.
+The JavaScript helper is published as a zero-dependency package at `packages/js-sdk/`. From an external project:
 
-v0.5 includes a small reusable helper at `examples/js-client/playlink-client.js`. It wraps the existing WebSocket JSON protocol without introducing a new backend feature or package publishing step. See `docs/js-client-api.md` for the current helper API.
+```bash
+npm install @playlink/client
+```
 
-Example usage:
+Requires Node.js 20+ or any modern browser. The example usage:
 
 ```js
-import { PlaylinkClient } from './playlink-client.js';
+import { PlaylinkClient, createStateSnapshot } from '@playlink/client';
 
 const alice = new PlaylinkClient({ name: 'alice' });
 await alice.connect();
@@ -283,6 +284,8 @@ const roomId = await alice.createRoom({ roomName: 'demo', maxPlayers: 4 });
 await alice.joinRoom(roomId, 'alice');
 alice.sendRoomMessage({ kind: 'move', x: 3, y: 7 });
 ```
+
+The in-tree `examples/js-client/` consumes the same package via a `file:` link, so the examples and the published SDK share one source of truth. See `packages/js-sdk/README.md` for the full SDK surface and `docs/js-client-api.md` for the v1.0 helper contract.
 
 Run the two-client SDK demo with the server already running:
 
@@ -400,23 +403,30 @@ npm run idle-timeout
 | v0.7 relay mode groundwork | Done | Design docs, topology boundaries, and relay architecture candidates documented. |
 | v0.8 observability and room stats | Done | `/api/stats` with connection, room, and player counts; room `message_count`/`created_at`; Web Console display; repeatable verification. |
 | v0.9 lightweight state sync prototype | Done | `state_snapshot` helpers, stale tick filtering, mini-game usage, and docs are implemented. |
+| v0.4 hardening pass | Done | Transport-layer frame/message size split, origin validation, per-session rate limiting, global and per-IP connection caps, graceful shutdown, name sanitization, `room_closed` event, `api_version` field, mutex-poison recovery, env-parse warnings. |
 | v1.0 stable baseline | Done | Protocol, JS helper API, debug console, state sync contracts, and `.\scripts\verify.ps1` release gate are implemented. |
+| v1.1 SDK packaging | Done | `@playlink/client` extracted to `packages/js-sdk/` as a zero-dependency ESM package with TypeScript declarations and `node --test` unit suite. `examples/js-client` now consumes it via a `file:` link. |
+| CI | Done | GitHub Actions workflow in `.github/workflows/ci.yml` runs Rust fmt/test, SDK tests, JS syntax checks, and end-to-end integration jobs. |
 
 ## Roadmap
 
-1. v0.1 dedicated WebSocket room server
-2. JavaScript test client
-3. Web debug console
-4. v0.3 protocol and room reliability
-5. v0.4 LAN discovery and host-mode groundwork
-6. v0.5 JavaScript SDK-style helper and example game workflow
-7. v0.6 JavaScript helper stabilization and API docs
-8. v0.7 relay mode groundwork
-9. v0.8 observability and room stats
-10. v0.9 lightweight state sync prototype
-11. v1.0 stable room protocol + JS helper + debug console baseline ✓
-12. SDK packages and example games
-13. Relay, P2P, and NAT traversal experiments after the baseline is stable
+1. v0.1 dedicated WebSocket room server ✓
+2. JavaScript test client ✓
+3. Web debug console ✓
+4. v0.3 protocol and room reliability ✓
+5. v0.4 LAN discovery and host-mode groundwork ✓
+6. v0.5 JavaScript SDK-style helper and example game workflow ✓
+7. v0.6 JavaScript helper stabilization and API docs ✓
+8. v0.7 relay mode groundwork ✓
+9. v0.8 observability and room stats ✓
+10. v0.9 lightweight state sync prototype ✓
+11. v0.4 hardening pass ✓
+12. v1.0 stable room protocol + JS helper + debug console baseline ✓
+13. v1.1 `@playlink/client` SDK packaging ✓
+14. CI pipeline ✓
+15. Publish `@playlink/client` to the npm registry
+16. More engine example integrations (Unity / C# / Rust client crate)
+17. Relay runtime prototype (after SDK pressure is real)
 
 ## Guardrails
 

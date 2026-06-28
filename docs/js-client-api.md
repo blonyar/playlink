@@ -1,10 +1,12 @@
 # Playlink JavaScript Client API
 
-`examples/js-client/playlink-client.js` exports a small example-oriented helper named `PlaylinkClient`.
+The JavaScript helper is published as a zero-dependency package named `@playlink/client` and lives in `packages/js-sdk/`. The in-tree `examples/js-client/` consumes the same package via a `file:` link.
 
-It wraps the current WebSocket JSON protocol without hiding the protocol shape. It is intended for examples and prototypes, not yet a published npm package.
+```bash
+npm install @playlink/client
+```
 
-For the v1.0 baseline, this document is the helper API contract for examples. The file can still change internally, but documented exports, method names, option names, state fields, protocol shapes, and error behavior should change only additively.
+This document describes the v1.x helper API contract. The file can still change internally, but documented exports, method names, option names, state fields, protocol shapes, and error behavior should change only additively. For npm-specific package metadata (license, file list, type-only exports like `PROTOCOL_VERSION` and `ERROR_CODES`) see `packages/js-sdk/README.md`.
 
 ## 1. Runtime Requirements
 
@@ -441,4 +443,6 @@ bob.close();
 
 This helper follows the current JSON protocol documented in `docs/protocol.md`.
 
-Future SDK changes should prefer additive behavior and preserve raw protocol compatibility wherever possible. A future published SDK may wrap or reorganize this helper, but v1.0 examples should keep the documented `PlaylinkClient`, `createStateSnapshot`, `StateSnapshotFilter`, and `StateSnapshotPublisher` contracts working.
+The `@playlink/client` package is the published v1.x artifact. Future changes should prefer additive behavior and preserve raw protocol compatibility wherever possible. v1.x examples must keep the documented `PlaylinkClient`, `createStateSnapshot`, `StateSnapshotFilter`, `StateSnapshotPublisher`, and (v1.1) `ProtocolError` contracts working.
+
+For v1.1, the SDK also exports `PROTOCOL_VERSION`, `DEFAULT_WS_URL`, `DEFAULT_HTTP_URL`, and a frozen `ERROR_CODES` map so consumers can build protocol-aware UI without hand-coding the string values.

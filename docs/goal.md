@@ -35,11 +35,15 @@ Completed:
 - v0.8 observability and room stats
 - v0.9 lightweight state sync prototype
 - v1.0 stable baseline for the room protocol, JavaScript helper API, dev-only debug console boundary, state-sync example contract, and one-command verification flow
+- v0.4 hardening pass (transport hardening, `room_closed` event, `api_version` field, mutex-poison recovery, env-parse warnings)
+- v1.1 `@playlink/client` SDK packaging (zero-dependency ESM package with TypeScript declarations and `node --test` unit suite; `examples/js-client` consumes it via a `file:` link)
+- v1.1 CI pipeline (GitHub Actions workflow covering Rust fmt/test, SDK tests, JS syntax, and end-to-end integration)
 
 Active convergence target:
 
-- SDK packages and example game integrations (next milestone)
-- Relay, P2P, and NAT traversal experiments after SDK scope is clearer
+- Publish `@playlink/client` to the npm registry
+- More engine example integrations (Unity / C# / Rust client crate) once at least two real games have validated the API
+- Relay runtime prototype (after SDK pressure is real)
 
 Current implementation includes:
 
@@ -48,12 +52,13 @@ Current implementation includes:
 - create, join, leave, inspect, and list rooms
 - room message broadcast
 - structured errors
-- `room_left` acknowledgement
+- `room_left` and `room_closed` (v1.1) acknowledgements
+- `api_version` field on `/api/server` for SDK capability negotiation
 - player sessions and idle cleanup
 - per-session token-bucket message rate limiting
-- global connection cap with per-IP limiting (RAII-guarded)
+- global connection cap with per-IP limiting (RAII-guarded, mutex-poison safe)
 - room-count cap with `ServerFull` error
-- transport-layer message-size enforcement (tungstenite)
+- transport-layer frame and message size split (PLAYLINK_MAX_FRAME_BYTES, PLAYLINK_MAX_MESSAGE_BYTES)
 - WebSocket Origin header validation (CSWSH protection, prod mode)
 - player/room name sanitization (control-character rejection)
 - graceful shutdown broadcasting a close signal to active connections
@@ -62,14 +67,16 @@ Current implementation includes:
 - server stats endpoint (`/api/stats`) with uptime, room/player/connection counts, and cumulative counters
 - room snapshots with `created_at_unix_secs` and `message_count`
 - optional UDP LAN discovery (private-range filtered)
-- JavaScript helper, smoke/error/discovery scripts, SDK demo, and mini-game example
+- `@playlink/client` JavaScript SDK package (zero dependencies, ESM, TypeScript declarations, `node --test` unit suite)
+- in-tree examples (smoke, errors, idle-timeout, state-sync, discover-lan, sdk-demo, mini-game) that consume the SDK
 - Godot 4 client (autoload singleton, signals, keepalive)
 - state snapshot helpers and stale tick filtering
 - configuration validation with startup warnings
-- broadcast concurrency via `RoomState` RwLock
+- broadcast concurrency via `RoomState` RwLock with monotonic message counters
 - embedded web console via `include_dir` (self-contained binary)
 - environment-variable parse-failure warnings
 - JavaScript client API documentation
+- GitHub Actions CI workflow covering four parallel jobs (rust, sdk, examples, integration)
 - relay groundwork planning document
 
 ## 4. Work Threads
@@ -220,18 +227,20 @@ Acceptance points met:
 
 Next direction:
 
-- SDK packages and example game integrations
-- Relay, P2P, and NAT traversal experiments after SDK scope is clearer
+- Publish `@playlink/client` to the npm registry and validate it against at least one external project
+- More engine example integrations (Unity / C# / Rust client crate) once the JavaScript SDK has at least one external consumer
+- Relay runtime prototype (after SDK pressure is real)
 
 ## 7. After v1.0
 
 Potential follow-up sequence:
 
 1. v1.0 stable room protocol + JS helper + debug console baseline ✓
-2. additional SDK or engine integration experiment
-3. relay runtime prototype as an optional topology module
-4. P2P/NAT traversal experiments with relay fallback
-5. packaged SDKs only after helper API pressure is real
+2. v1.1 hardening pass + SDK packaging + CI ✓
+3. publish `@playlink/client` to npm and document external adoption
+4. additional SDK or engine integration experiment (Unity / C# / Rust client crate)
+5. relay runtime prototype as an optional topology module
+6. P2P/NAT traversal experiments with relay fallback
 
 The order can change, but each milestone must keep the core room loop intact and must not turn `RoomRegistry` into topology, simulation, account, or persistence infrastructure.
 
