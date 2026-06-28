@@ -23,11 +23,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/state-snapshot.test.mjs test/protocol.test.mjs test/utils.test.mjs",
     "test:state-snapshot": "node --test test/state-snapshot.test.mjs",
-    "test:client": "node --test test/client.test.mjs",
-    "test:reconnect": "node --test test/reconnect.test.mjs",
-    "test:messages": "node --test test/messages.test.mjs",
+    "test:protocol": "node --test test/protocol.test.mjs",
     "test:utils": "node --test test/utils.test.mjs"
   },
   "keywords": [
