@@ -391,6 +391,13 @@ function connect() {
   });
 
   socket.addEventListener('message', (event) => {
+    // WebSocket frames can be text or binary. The Playlink protocol is
+    // strictly text/JSON, so we ignore anything that is not a string
+    // rather than letting `JSON.parse` throw on a Blob or ArrayBuffer.
+    if (typeof event.data !== 'string') {
+      log('error', 'Ignoring non-text WebSocket frame');
+      return;
+    }
     let message;
     try {
       message = JSON.parse(event.data);

@@ -430,9 +430,26 @@ export class PlaylinkClient {
           reject(new Error('reconnect failed'));
         }, { once: true });
       });
-    } catch {
+    } catch (error) {
+      // Tear down the failed socket and clear the public reference so a
+      // subsequent `connect()` call does not pick up a half-open socket
+      // and so its listeners are not retained against the JS engine.
+      // The socket listeners above use `{ once: true }`, but a timeout
+      // rejection path that races the `error` event can still leave a
+      // dangling reference without an explicit close.
+      try {
+        socket.close();
+      } catch {
+        // socket.close() never throws in browsers/Node, but be defensive.
+      }
+      if (this.socket === socket) {
+        this.socket = null;
+      }
+      this.log?.(`[${this.name}] reconnect attempt failed: ${error.message ?? error}`);
       if (this.#reconnectAttempt < this.maxReconnectAttempts) {
         this.#scheduleReconnect();
+      } else {
+        this.#setState(PlaylinkClient.DISCONNECTED);
       }
       return;
     }
@@ -550,6 +567,16 @@ export class PlaylinkClient {
 
     if (message.type === 'player_left') {
       this.members = this.members.filter((m) => m.id !== message.payload.player_id);
+    }
+
+    // `room_left` is the per-session acknowledgement that this client
+    // has left the room. Other members stay in the room, so we only
+    // clear the local session state; their `player_left` broadcast
+    // (if it has not already been delivered) will arrive separately.
+    if (message.type === 'room_left') {
+      this.roomId = null;
+      this.playerId = null;
+      this.members = [];
     }
 
     for (const handler of this.handlers.get(message.type) ?? []) {

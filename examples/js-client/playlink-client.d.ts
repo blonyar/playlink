@@ -130,6 +130,7 @@ export interface ServerMetadata {
   server_id: string;
   name: string;
   version: string;
+  api_version: number;
   topology: string;
   bind_addr: string;
   websocket_path: string;
