@@ -6,28 +6,51 @@ import { fileURLToPath } from 'node:url';
 
 const port = Number(process.env.PLAYLINK_MINI_GAME_PORT ?? 7780);
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
+const sdkRoot = resolve(root, '..', '..', 'packages', 'js-sdk');
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
 };
 
-function safePath(urlPath) {
-  const requested = urlPath === '/' ? '/mini-game.html' : urlPath;
-  const normalized = normalize(decodeURIComponent(requested)).replace(/^([/\\])+/, '');
-  const filePath = resolve(root, normalized);
-  if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
+function safePath(rootDir, urlPath) {
+  const normalized = normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, '');
+  const filePath = resolve(rootDir, normalized);
+  if (filePath !== rootDir && !filePath.startsWith(`${rootDir}${sep}`)) {
     return null;
   }
   return filePath;
 }
 
+const sdkPathMap = {
+  '/playlink-client.js': 'index.js',
+  '/client.js': 'client.js',
+  '/state-snapshot.js': 'state-snapshot.js',
+  '/protocol.js': 'protocol.js',
+  '/utils.js': 'utils.js',
+};
+
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
-    const filePath = safePath(url.pathname);
+    let urlPath = url.pathname;
+    if (urlPath === '/') urlPath = '/mini-game.html';
+
+    // The browser's import map points `@playlink/client` at
+    // `/playlink-client.js`. We serve the SDK source files directly
+    // from packages/js-sdk/src/ so the example does not need a
+    // bundler. The index re-exports the internal modules with bare
+    // relative paths, so we also serve client.js, state-snapshot.js,
+    // protocol.js, and utils.js under the same root.
+    let filePath;
+    if (Object.hasOwn(sdkPathMap, urlPath)) {
+      filePath = resolve(sdkRoot, 'src', sdkPathMap[urlPath]);
+    } else {
+      filePath = safePath(root, urlPath);
+    }
+
     if (!filePath) {
       response.writeHead(404);
       response.end('Not found');

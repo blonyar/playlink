@@ -1,4 +1,4 @@
-import { PlaylinkClient } from './playlink-client.js';
+import { PlaylinkClient } from '@playlink/client';
 
 const alice = new PlaylinkClient({ name: 'alice', log: console.log });
 const bob = new PlaylinkClient({ name: 'bob', log: console.log });

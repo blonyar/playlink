@@ -2,7 +2,7 @@ import {
   PlaylinkClient,
   StateSnapshotFilter,
   StateSnapshotPublisher,
-} from './playlink-client.js';
+} from '@playlink/client';
 
 const elements = {
   wsUrl: document.querySelector('#wsUrl'),

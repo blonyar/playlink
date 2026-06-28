@@ -3,3 +3,4 @@
 *.log
 .qoder/
 .godot/
+node_modules/

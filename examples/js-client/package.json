@@ -14,5 +14,8 @@
     "discover-lan": "node discover-lan.js",
     "sdk-demo": "node sdk-demo.js",
     "mini-game": "node mini-game-server.js"
+  },
+  "dependencies": {
+    "@playlink/client": "file:../../packages/js-sdk"
   }
 }

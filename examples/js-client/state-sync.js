@@ -4,7 +4,7 @@ import {
   createStateSnapshot,
   StateSnapshotFilter,
   StateSnapshotPublisher,
-} from './playlink-client.js';
+} from '@playlink/client';
 
 function testSnapshotShape() {
   const snapshot = createStateSnapshot({
