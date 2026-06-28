@@ -28,6 +28,7 @@ Stable server messages:
 - `player_joined`
 - `player_left`
 - `room_broadcast`
+- `room_closed` (additive, v1.1)
 - `event_lagged`
 - `pong`
 - `error`
@@ -268,6 +269,22 @@ Sent when the server detects that this client missed room events because it was 
 }
 ```
 
+### `room_closed` (v1.1 additive)
+
+Sent to the last remaining subscriber when a room is torn down after its last player leaves or disconnects. The payload carries the closing room id and a human-readable reason such as `player_left` (explicit `leave_room`) or `player_disconnected` (idle timeout, network drop, or server shutdown).
+
+```json
+{
+  "type": "room_closed",
+  "payload": {
+    "room_id": "00000000-0000-0000-0000-000000000000",
+    "reason": "player_left"
+  }
+}
+```
+
+Clients that ignore this event still observe `player_left` followed by a closed broadcast channel on their room subscription.
+
 ### `pong`
 
 ```json
@@ -304,6 +321,7 @@ Current behavior:
 
 - Empty rooms are cleaned up immediately after the last player leaves or disconnects.
 - A successful `leave_room` returns `room_left`; remaining room members receive `player_left`.
+- The last remaining subscriber receives `room_closed` (v1.1 additive) immediately before the broadcast channel closes.
 - A client can be in at most one room.
 - Joining another room requires an explicit `leave_room` first.
 - Server state is in-memory only. Restarting the server deletes all rooms.

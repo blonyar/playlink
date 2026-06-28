@@ -209,7 +209,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, _guard: ConnectionGua
         };
 
         if let Some(room_id) = session.room_id {
-            state.rooms.leave_room(room_id, session.player_id).await;
+            state
+                .rooms
+                .leave_room(room_id, session.player_id, "player_disconnected")
+                .await;
         }
 
         if let Some(task) = room_events_task {
@@ -362,7 +365,10 @@ async fn handle_client_message(
         ClientMessage::LeaveRoom => {
             if let Some(room_id) = session.room_id.take() {
                 session.player_name.take();
-                state.rooms.leave_room(room_id, session.player_id).await;
+                state
+                    .rooms
+                    .leave_room(room_id, session.player_id, "player_left")
+                    .await;
                 if let Some(task) = room_events_task.take() {
                     task.abort();
                 }

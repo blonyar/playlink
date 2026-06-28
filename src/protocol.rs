@@ -117,6 +117,14 @@ pub enum ServerMessage {
         from: Uuid,
         data: Value,
     },
+    /// Sent to the last remaining subscriber when a room is being torn down
+    /// after its last player leaves or disconnects. v1.1 additive: clients
+    /// that ignore this event still observe `player_left` followed by an
+    /// `event_lagged` or a closed subscription.
+    RoomClosed {
+        room_id: Uuid,
+        reason: String,
+    },
     EventLagged {
         skipped: u64,
     },
@@ -139,7 +147,7 @@ impl ServerMessage {
             },
             RoomEvent::PlayerLeft { player_id } => Self::PlayerLeft { player_id },
             RoomEvent::Message { from, data } => Self::RoomBroadcast { from, data },
-            RoomEvent::RoomClosed { reason } => Self::error(ErrorCode::InternalError, reason),
+            RoomEvent::RoomClosed { room_id, reason } => Self::RoomClosed { room_id, reason },
         }
     }
 }
@@ -159,6 +167,7 @@ pub enum RoomEvent {
         data: Value,
     },
     RoomClosed {
+        room_id: Uuid,
         reason: String,
     },
 }
@@ -308,6 +317,47 @@ mod tests {
             }
             other => panic!("unexpected message: {other:?}"),
         }
+    }
+
+    #[test]
+    fn server_message_from_room_event_maps_room_closed_to_server_room_closed() {
+        let room_id = Uuid::new_v4();
+        let message = ServerMessage::from_room_event(RoomEvent::RoomClosed {
+            room_id,
+            reason: "player_left".to_string(),
+        });
+
+        match message {
+            ServerMessage::RoomClosed {
+                room_id: actual_room_id,
+                reason,
+            } => {
+                assert_eq!(actual_room_id, room_id);
+                assert_eq!(reason, "player_left");
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn server_message_room_closed_serializes_snake_case() {
+        let room_id = Uuid::new_v4();
+        let value = serde_json::to_value(ServerMessage::RoomClosed {
+            room_id,
+            reason: "player_disconnected".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(
+            value,
+            json!({
+                "type": "room_closed",
+                "payload": {
+                    "room_id": room_id,
+                    "reason": "player_disconnected"
+                }
+            })
+        );
     }
 
     #[test]

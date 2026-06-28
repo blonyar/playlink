@@ -235,7 +235,7 @@ impl RoomRegistry {
         Ok(receiver)
     }
 
-    pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid) {
+    pub async fn leave_room(&self, room_id: Uuid, player_id: Uuid, reason: &str) {
         // Drop the DashMap shard read-guard before awaiting the room state mutex.
         let Some(room) = self.get_room(&room_id) else {
             return;
@@ -259,6 +259,15 @@ impl RoomRegistry {
         }
 
         if room_empty {
+            // Publish the teardown event before the room is dropped so the
+            // last subscriber can observe `room_closed` and then a
+            // `RecvError::Closed` on its receiver. This is a v1.1 additive
+            // event; clients that ignore it still see the same
+            // `player_left` followed by a closed channel.
+            let _ = room.publish(RoomEvent::RoomClosed {
+                room_id,
+                reason: reason.to_string(),
+            });
             self.rooms.remove(&room_id);
         }
     }
@@ -529,7 +538,7 @@ mod tests {
         let alice_id = alice.id;
 
         registry.join_room(room_id, alice).await.unwrap();
-        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(room_id, alice_id, "test").await;
 
         assert!(registry.detail(room_id).await.is_none());
     }
@@ -545,7 +554,7 @@ mod tests {
 
         registry.join_room(room_id, alice).await.unwrap();
         registry.join_room(room_id, bob).await.unwrap();
-        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(room_id, alice_id, "test").await;
 
         let detail = registry.detail(room_id).await.unwrap();
         assert_eq!(detail.players.len(), 1);
@@ -564,16 +573,16 @@ mod tests {
         registry.join_room(room_id, alice).await.unwrap();
         registry.join_room(room_id, bob).await.unwrap();
 
-        registry.leave_room(room_id, alice_id).await;
-        registry.leave_room(room_id, alice_id).await;
-        registry.leave_room(Uuid::new_v4(), alice_id).await;
+        registry.leave_room(room_id, alice_id, "test").await;
+        registry.leave_room(room_id, alice_id, "test").await;
+        registry.leave_room(Uuid::new_v4(), alice_id, "test").await;
 
         let detail = registry.detail(room_id).await.unwrap();
         assert_eq!(detail.players.len(), 1);
         assert_eq!(detail.players[0].id, bob_id);
 
-        registry.leave_room(room_id, bob_id).await;
-        registry.leave_room(room_id, bob_id).await;
+        registry.leave_room(room_id, bob_id, "test").await;
+        registry.leave_room(room_id, bob_id, "test").await;
 
         assert!(registry.detail(room_id).await.is_none());
     }
@@ -714,7 +723,7 @@ mod tests {
         let alice_id = alice.id;
 
         registry.join_room(room_id, alice).await.unwrap();
-        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(room_id, alice_id, "test").await;
         assert!(registry.detail(room_id).await.is_none());
 
         let error = registry
@@ -737,7 +746,7 @@ mod tests {
         // broadcast, but simulate the room being torn down between the state
         // check and the publish by removing the only player and then
         // broadcasting as that player. The counter must not move.
-        registry.leave_room(room_id, alice_id).await;
+        registry.leave_room(room_id, alice_id, "test").await;
 
         let stats_before = registry.stats().await;
         let error = registry
@@ -776,5 +785,68 @@ mod tests {
 
         assert_eq!(detail.message_count, 0);
         assert_eq!(stats.total_messages_broadcast, 0);
+    }
+
+    #[tokio::test]
+    async fn last_player_leave_publishes_room_closed_with_reason() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        // Drain the PlayerJoined event.
+        let _ = receiver.recv().await.unwrap();
+
+        registry.leave_room(room_id, alice_id, "player_left").await;
+
+        // PlayerLeft arrives first, then RoomClosed.
+        let first = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(first, RoomEvent::PlayerLeft { .. }));
+
+        let event = timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::RoomClosed {
+                room_id: closed_room_id,
+                reason,
+            } => {
+                assert_eq!(closed_room_id, room_id);
+                assert_eq!(reason, "player_left");
+            }
+            other => panic!("expected RoomClosed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn room_closed_is_not_published_when_other_players_remain() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(2)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let bob = player("Bob");
+        let mut alice_receiver = registry.join_room(room_id, alice).await.unwrap();
+        let _ = alice_receiver.recv().await.unwrap();
+        let _ = registry.join_room(room_id, bob).await.unwrap();
+        let _ = alice_receiver.recv().await.unwrap();
+
+        registry.leave_room(room_id, alice_id, "player_left").await;
+
+        // The receiver is still alive (room not torn down) and only
+        // PlayerLeft should arrive — no RoomClosed.
+        let event = timeout(Duration::from_millis(50), alice_receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match event {
+            RoomEvent::PlayerLeft { player_id } => assert_eq!(player_id, alice_id),
+            other => panic!("expected PlayerLeft, got {other:?}"),
+        }
     }
 }
