@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v0.4-lan-discovery-prototype]
+  pull_request:
+    branches: [main, v0.4-lan-discovery-prototype]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  rust:
+    name: Rust (fmt, check, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Test
+        run: cargo test --verbose
+
+  sdk:
+    name: JS SDK (unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/js-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+  examples:
+    name: JS examples (syntax + state-sync)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/js-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax check all JS files
+        run: |
+          for file in \
+            node_modules/@playlink/client/src/index.js \
+            node_modules/@playlink/client/src/client.js \
+            node_modules/@playlink/client/src/state-snapshot.js \
+            node_modules/@playlink/client/src/protocol.js \
+            node_modules/@playlink/client/src/utils.js \
+            smoke.js errors.js sdk-demo.js mini-game.js \
+            mini-game-server.js state-sync.js idle-timeout.js \
+            discover-lan.js
+          do
+            node --check "$file"
+          done
+
+      - name: Run state-sync helper test
+        run: npm run state-sync
+
+  integration:
+    name: End-to-end (smoke + errors + sdk-demo)
+    runs-on: ubuntu-latest
+    services:
+      # Reserved for future containerized server runs. For now the
+      # workflow builds and runs the server in a background step.
+    env:
+      PLAYLINK_BIND_ADDR: 127.0.0.1:7777
+      PLAYLINK_HTTP_URL: http://127.0.0.1:7777
+      PLAYLINK_WS_URL: ws://127.0.0.1:7777/ws
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Playlink server
+        run: cargo build
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JS example dependencies
+        working-directory: examples/js-client
+        run: npm install
+
+      - name: Start Playlink server
+        run: |
+          ./target/debug/playlink &
+          echo "playlink_pid=$!"
+          for i in $(seq 1 40); do
+            if curl --silent --fail http://127.0.0.1:7777/health; then
+              echo "server is healthy"
+              break
+            fi
+            sleep 0.5
+          done
+
+      - name: Run smoke test
+        working-directory: examples/js-client
+        run: npm run smoke
+
+      - name: Run errors test
+        working-directory: examples/js-client
+        run: npm run errors
+
+      - name: Run sdk-demo
+        working-directory: examples/js-client
+        run: npm run sdk-demo
+
+      - name: Stop Playlink server
+        if: always()
+        run: pkill -f target/debug/playlink || true
