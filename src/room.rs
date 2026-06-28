@@ -846,7 +846,93 @@ mod tests {
 
         match event {
             RoomEvent::PlayerLeft { player_id } => assert_eq!(player_id, alice_id),
-            other => panic!("expected PlayerLeft, got {other:?}"),
+            other => panic!("expected expected PlayerLeft, got {other:?}"),
         }
+    }
+
+    /// Repeated join + leave cycles must keep the per-registry
+    /// `active_players` counter strictly at zero. Drift would either
+    /// leak slots (counter higher than reality) or underflow into the
+    /// negative range (counter lower than reality).
+    #[tokio::test]
+    async fn active_players_returns_to_zero_after_repeated_join_leave() {
+        let registry = RoomRegistry::default();
+
+        for _ in 0..50 {
+            let room_id = registry.create_room(None, Some(4)).unwrap();
+            let alice = player("Alice");
+            let bob = player("Bob");
+
+            registry.join_room(room_id, alice.clone()).await.unwrap();
+            registry.join_room(room_id, bob.clone()).await.unwrap();
+
+            let mid = registry.stats().await;
+            assert_eq!(mid.player_count, 2, "two joins raise counter to 2");
+
+            registry.leave_room(room_id, alice.id, "test").await;
+            registry.leave_room(room_id, bob.id, "test").await;
+        }
+
+        let stats = registry.stats().await;
+        assert_eq!(stats.player_count, 0, "counter must drain to zero");
+        assert_eq!(stats.room_count, 0, "empty rooms are torn down");
+    }
+
+    /// The cleanup task path (no joiners ever) must not perturb the
+    /// counter: an empty room that never had players should be removed
+    /// without touching `active_players`.
+    #[tokio::test]
+    async fn cleanup_task_preserves_active_players_for_rooms_with_no_players() {
+        let registry = RoomRegistry::default();
+        for _ in 0..10 {
+            registry
+                .create_room(Some("Empty".to_string()), Some(4))
+                .unwrap();
+        }
+        let stats_before = registry.stats().await;
+        assert_eq!(stats_before.player_count, 0);
+
+        // Direct call into the internal cleanup, mirroring the periodic
+        // task behavior.
+        registry.cleanup_empty_rooms().await;
+
+        let stats_after = registry.stats().await;
+        assert_eq!(
+            stats_after.player_count, 0,
+            "no joiners => no counter change"
+        );
+        assert_eq!(stats_after.room_count, 0, "all empty rooms are removed");
+    }
+
+    /// Interleaved join/leave against the same player must not leak or
+    /// double-decrement the counter, even when the same player is
+    /// moved between rooms or re-joins after leaving.
+    #[tokio::test]
+    async fn active_players_tracks_player_moves_between_rooms() {
+        let registry = RoomRegistry::default();
+        let room_a = registry.create_room(None, Some(2)).unwrap();
+        let room_b = registry.create_room(None, Some(2)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_a, alice.clone()).await.unwrap();
+        let stats = registry.stats().await;
+        assert_eq!(stats.player_count, 1);
+
+        // Alice leaves room_a and joins room_b. She should never be
+        // double-counted while transitioning; `join_room` is rejected
+        // by the websocket layer if she is still in a room, but at the
+        // registry level a direct call after leave is a clean move.
+        registry.leave_room(room_a, alice_id, "test").await;
+        let stats = registry.stats().await;
+        assert_eq!(stats.player_count, 0, "leave decrements to zero");
+
+        registry.join_room(room_b, alice.clone()).await.unwrap();
+        let stats = registry.stats().await;
+        assert_eq!(stats.player_count, 1, "re-join increments to one");
+
+        registry.leave_room(room_b, alice_id, "test").await;
+        let stats = registry.stats().await;
+        assert_eq!(stats.player_count, 0, "final leave returns to zero");
     }
 }
