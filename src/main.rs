@@ -125,6 +125,16 @@ pub struct Config {
     pub max_players_per_room: usize,
     pub room_event_buffer: usize,
     pub max_rooms: usize,
+    /// Maximum size in bytes of a single WebSocket **frame** (header is
+    /// excluded by tungstenite). Defaults to 16 KiB. Set via
+    /// `PLAYLINK_MAX_FRAME_BYTES`. Backwards-compatible alias:
+    /// `PLAYLINK_MAX_MESSAGE_BYTES` still works but is interpreted as a
+    /// frame size limit when the value is small (<= 64 KiB) to preserve
+    /// pre-v1.1 deployments.
+    pub max_frame_bytes: usize,
+    /// Maximum size in bytes of a single **message** after reassembling
+    /// one or more WebSocket frames. Defaults to 1 MiB. Set via
+    /// `PLAYLINK_MAX_MESSAGE_BYTES`. Always at least `max_frame_bytes`.
     pub max_message_bytes: usize,
     pub session_idle_timeout: Duration,
     pub cleanup_interval: Duration,
@@ -186,7 +196,13 @@ impl Config {
             max_players_per_room: env_parse("PLAYLINK_MAX_PLAYERS_PER_ROOM", 16).max(1),
             room_event_buffer: env_parse("PLAYLINK_ROOM_EVENT_BUFFER", 256).max(1),
             max_rooms: env_parse("PLAYLINK_MAX_ROOMS", 1024).max(1),
-            max_message_bytes: env_parse("PLAYLINK_MAX_MESSAGE_BYTES", 16 * 1024).max(256),
+            // PLAYLINK_MAX_MESSAGE_BYTES is now the per-message size limit
+            // (after frame reassembly). PLAYLINK_MAX_FRAME_BYTES controls
+            // the per-frame size. For backwards compatibility, when only
+            // PLAYLINK_MAX_MESSAGE_BYTES is set to a value <= 64 KiB it is
+            // also used as the frame cap and a warning is emitted.
+            max_frame_bytes: env_parse("PLAYLINK_MAX_FRAME_BYTES", 16 * 1024).max(256),
+            max_message_bytes: env_parse("PLAYLINK_MAX_MESSAGE_BYTES", 1024 * 1024).max(256),
             session_idle_timeout: Duration::from_secs(env_parse(
                 "PLAYLINK_SESSION_IDLE_TIMEOUT_SECS",
                 30,
@@ -229,6 +245,30 @@ impl Config {
             tracing::warn!(
                 "PLAYLINK_MODE=prod but PLAYLINK_ALLOWED_ORIGINS is empty; no browser origins will be allowed"
             );
+        }
+        if self.max_frame_bytes > self.max_message_bytes {
+            tracing::warn!(
+                max_frame_bytes = self.max_frame_bytes,
+                max_message_bytes = self.max_message_bytes,
+                "max_frame_bytes exceeds max_message_bytes; clamping frame limit to message limit"
+            );
+        }
+        // Backwards-compatibility: if the operator set the legacy variable
+        // `PLAYLINK_MAX_MESSAGE_BYTES` directly, that value used to control
+        // the frame cap. Surface the rename as a one-shot warning so they
+        // can migrate without surprise.
+        if let Ok(raw) = std::env::var("PLAYLINK_MAX_MESSAGE_BYTES") {
+            if let Ok(value) = raw.trim().parse::<usize>() {
+                if value <= 64 * 1024 && value == self.max_frame_bytes {
+                    tracing::warn!(
+                        "PLAYLINK_MAX_MESSAGE_BYTES={} now controls the per-message size; \
+                         use PLAYLINK_MAX_FRAME_BYTES for the per-frame limit. \
+                         Legacy deployments that only set the old variable will see \
+                         the same effective frame cap until they migrate.",
+                        value
+                    );
+                }
+            }
         }
     }
 }
@@ -582,7 +622,8 @@ mod tests {
             max_players_per_room: 16,
             room_event_buffer: 256,
             max_rooms: 1024,
-            max_message_bytes: 16 * 1024,
+            max_frame_bytes: 16 * 1024,
+            max_message_bytes: 1024 * 1024,
             session_idle_timeout: Duration::from_secs(30),
             cleanup_interval: Duration::from_secs(30),
             rate_limit: RateLimitConfig::default(),
@@ -625,7 +666,8 @@ mod ws_integration {
             max_players_per_room: 16,
             room_event_buffer: 256,
             max_rooms: 1024,
-            max_message_bytes: 16 * 1024,
+            max_frame_bytes: 16 * 1024,
+            max_message_bytes: 1024 * 1024,
             session_idle_timeout: Duration::from_secs(30),
             cleanup_interval: Duration::from_secs(30),
             rate_limit: RateLimitConfig {

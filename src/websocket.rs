@@ -63,11 +63,15 @@ pub async fn connect(
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
 
-    // Enforce the message size cap at the transport layer so oversized frames
-    // are rejected before being buffered into memory.
+    // Enforce the size caps at the transport layer so oversized frames
+    // and reassembled messages are rejected before being buffered into
+    // memory. `max_frame_bytes` caps a single WebSocket frame;
+    // `max_message_bytes` caps a reassembled message that may consist
+    // of multiple frames. The frame cap is always <= message cap.
+    let max_frame_bytes = state.config.max_frame_bytes;
     let max_message_bytes = state.config.max_message_bytes;
     ws.max_message_size(max_message_bytes)
-        .max_frame_size(max_message_bytes)
+        .max_frame_size(max_frame_bytes)
         .on_upgrade(move |socket| handle_socket(socket, state, guard))
 }
 

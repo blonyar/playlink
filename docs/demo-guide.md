@@ -406,3 +406,12 @@ Check:
 ### Room disappears after leaving
 
 This is expected when the last player leaves. Empty rooms are cleaned up immediately.
+
+### Connection closes with `Message Too Long`
+
+The server enforces two size limits at the WebSocket transport layer:
+
+- `PLAYLINK_MAX_FRAME_BYTES` (default 16 KiB) — maximum bytes in a single WebSocket frame.
+- `PLAYLINK_MAX_MESSAGE_BYTES` (default 1 MiB) — maximum bytes in a reassembled message.
+
+In v1.0 the old `PLAYLINK_MAX_MESSAGE_BYTES` value was applied to the frame cap, so JSON messages above 16 KiB were rejected even when split across frames. v1.1 splits the two knobs: if you are upgrading and the old variable is set, raise `PLAYLINK_MAX_MESSAGE_BYTES` to your expected max payload size and keep `PLAYLINK_MAX_FRAME_BYTES` at the default unless you really need larger single frames.
