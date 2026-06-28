@@ -227,7 +227,7 @@ impl RoomRegistry {
             self.active_players.fetch_add(1, Ordering::Relaxed);
         }
 
-        room.publish(RoomEvent::PlayerJoined {
+        let _ = room.publish(RoomEvent::PlayerJoined {
             player_id: player.id,
             player_name: player.name,
         });
@@ -255,7 +255,7 @@ impl RoomRegistry {
         };
 
         if player_removed {
-            room.publish(RoomEvent::PlayerLeft { player_id });
+            let _ = room.publish(RoomEvent::PlayerLeft { player_id });
         }
 
         if room_empty {
@@ -274,7 +274,13 @@ impl RoomRegistry {
 
         {
             let state = room.state.read().await;
-            if state.removing || !state.players.contains_key(&from) {
+            if state.removing {
+                return Err(PlaylinkError::new(
+                    ErrorCode::RoomNotFound,
+                    "Room not found",
+                ));
+            }
+            if !state.players.contains_key(&from) {
                 return Err(PlaylinkError::new(
                     ErrorCode::NotInRoom,
                     "Player is not in room",
@@ -282,10 +288,16 @@ impl RoomRegistry {
             }
         }
 
-        room.message_count.fetch_add(1, Ordering::Relaxed);
-        self.total_messages_broadcast
-            .fetch_add(1, Ordering::Relaxed);
-        room.publish(RoomEvent::Message { from, data });
+        // Publish before counting so the per-room and registry counters only
+        // reflect messages that were actually delivered to at least one
+        // subscriber. `events.send` returns `Err` only when no receiver is
+        // active; in that case the event would be dropped, so we do not bump
+        // the counters either.
+        if room.publish(RoomEvent::Message { from, data }).is_ok() {
+            room.message_count.fetch_add(1, Ordering::Relaxed);
+            self.total_messages_broadcast
+                .fetch_add(1, Ordering::Relaxed);
+        }
         Ok(())
     }
 
@@ -355,8 +367,13 @@ impl RoomRegistry {
 }
 
 impl Room {
-    fn publish(&self, event: RoomEvent) {
-        let _ = self.events.send(event);
+    /// Forwards an event to every room subscriber. Returns `Err` only when no
+    /// receiver is active (e.g., the last subscriber has dropped before the
+    /// `Room` itself is removed from the registry). Callers that already
+    /// know the event will be observed can use `let _ = room.publish(...)`
+    /// to ignore the no-receiver case.
+    fn publish(&self, event: RoomEvent) -> Result<(), broadcast::error::SendError<RoomEvent>> {
+        self.events.send(event).map(|_| ())
     }
 }
 
@@ -687,5 +704,77 @@ mod tests {
         assert_eq!(snapshot_a.message_count, 0);
         assert!(snapshot_a.created_at_unix_secs > 0);
         assert_eq!(snapshot_b.player_count, 1);
+    }
+
+    #[tokio::test]
+    async fn broadcast_after_room_teardown_returns_room_not_found() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+
+        registry.join_room(room_id, alice).await.unwrap();
+        registry.leave_room(room_id, alice_id).await;
+        assert!(registry.detail(room_id).await.is_none());
+
+        let error = registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::RoomNotFound);
+    }
+
+    #[tokio::test]
+    async fn broadcast_does_not_increment_counters_when_room_is_being_removed() {
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let _ = registry.join_room(room_id, alice).await.unwrap();
+
+        // Drain the join event so the receiver is still active for the next
+        // broadcast, but simulate the room being torn down between the state
+        // check and the publish by removing the only player and then
+        // broadcasting as that player. The counter must not move.
+        registry.leave_room(room_id, alice_id).await;
+
+        let stats_before = registry.stats().await;
+        let error = registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap_err();
+        let stats_after = registry.stats().await;
+
+        assert_eq!(error.code, ErrorCode::RoomNotFound);
+        assert_eq!(
+            stats_after.total_messages_broadcast,
+            stats_before.total_messages_broadcast
+        );
+    }
+
+    #[tokio::test]
+    async fn broadcast_does_not_increment_counters_when_no_receivers() {
+        // Drop the receiver so `events.send` returns `Err`; counters must
+        // stay at zero to avoid drift between `message_count` and the actual
+        // number of delivered events.
+        let registry = RoomRegistry::default();
+        let room_id = registry.create_room(None, Some(1)).unwrap();
+        let alice = player("Alice");
+        let alice_id = alice.id;
+        let mut receiver = registry.join_room(room_id, alice).await.unwrap();
+        let _ = receiver.recv().await.unwrap();
+        drop(receiver);
+
+        registry
+            .broadcast(room_id, alice_id, json!({ "move": "left" }))
+            .await
+            .unwrap();
+
+        let detail = registry.detail(room_id).await.unwrap();
+        let stats = registry.stats().await;
+
+        assert_eq!(detail.message_count, 0);
+        assert_eq!(stats.total_messages_broadcast, 0);
     }
 }
