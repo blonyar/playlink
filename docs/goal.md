@@ -38,6 +38,7 @@ Completed:
 - v0.4 hardening pass (transport hardening, `room_closed` event, `api_version` field, mutex-poison recovery, env-parse warnings)
 - v1.1 `@playlink/client` SDK packaging (zero-dependency ESM package with TypeScript declarations and `node --test` unit suite; `examples/js-client` consumes it via a `file:` link)
 - v1.1 CI pipeline (GitHub Actions workflow covering Rust fmt/test, SDK tests, JS syntax, and end-to-end integration)
+- v1.2 GUI launcher (eframe/egui native desktop launcher for server and demo lifecycle)
 
 Active convergence target:
 
@@ -78,6 +79,7 @@ Current implementation includes:
 - JavaScript client API documentation
 - GitHub Actions CI workflow covering four parallel jobs (rust, sdk, examples, integration)
 - relay groundwork planning document
+- GUI launcher (`playlink-launcher`) with service lifecycle management, log panel, settings persistence, and browser auto-open
 
 ## 4. Work Threads
 
@@ -226,7 +228,8 @@ Potential follow-up sequence:
 
 1. v1.0 stable room protocol + JS helper + debug console baseline ✓
 2. v1.1 hardening pass + SDK packaging + CI ✓
-3. publish `@playlink/client` to npm and document external adoption
+3. v1.2 GUI launcher ✓
+4. publish `@playlink/client` to npm and document external adoption
 4. additional SDK or engine integration experiment (Unity / C# / Rust client crate)
 5. relay runtime prototype as an optional topology module
 6. P2P/NAT traversal experiments with relay fallback
@@ -257,10 +260,15 @@ Manual equivalent:
 rustup run stable cargo fmt --check
 rustup run stable cargo check
 rustup run stable cargo test
-node --check examples/js-client/playlink-client.js
+node --check packages/js-sdk/src/index.js
+node --check packages/js-sdk/src/client.js
+node --check packages/js-sdk/src/protocol.js
+node --check packages/js-sdk/src/state-snapshot.js
+node --check packages/js-sdk/src/utils.js
 node --check examples/js-client/sdk-demo.js
 node --check examples/js-client/mini-game.js
 node --check examples/js-client/mini-game-server.js
+node --check examples/js-client/tanks.js
 node --check web-console/assets/app.js
 node --check examples/js-client/smoke.js
 node --check examples/js-client/errors.js

@@ -62,7 +62,7 @@ Playlink is not trying to be an MMO backend, a global matchmaking platform, a co
 
 ## Current Status
 
-Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper API, Web Debug Console boundary, state sync conventions, and one-command verification flow are stable.
+Playlink v1.1 is complete. The JSON/WebSocket room protocol, JavaScript helper API, Web Debug Console, state sync conventions, GUI launcher, and one-command verification flow are stable.
 
 - Rust server
 - WebSocket transport
@@ -89,6 +89,7 @@ Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper A
 - browser Tank Wars 2-player demo (`examples/js-client/tanks.html`)
 - Rust unit tests, SDK unit tests, and JavaScript integration scripts
 - one-command verification via `.\scripts\verify.ps1` and GitHub Actions CI
+- GUI launcher (`playlink-launcher`) for starting/stopping server and demo from a native window (see `scripts/run-launcher.ps1`)
 
 See `docs/v1.0-baseline.md` for the baseline protocol and helper contract. See `packages/js-sdk/README.md` for the published SDK surface.
 
@@ -394,7 +395,6 @@ npm run idle-timeout
 - `docs/demo-guide.md` — runnable demos and local verification flow
 - `docs/goal.md` — long-term framework direction and work threads
 - `docs/v1.0-baseline.md` — active v1.0 baseline contracts and acceptance criteria
-- `docs/v0.7-relay-groundwork-plan.md` — relay groundwork boundaries and next architecture plan
 - `docs/relay-metadata.md` — future relay metadata design notes
 - `docs/sync-models.md` — future event/state/lockstep sync model boundaries
 
@@ -415,6 +415,7 @@ npm run idle-timeout
 | v0.4 hardening pass | Done | Transport-layer frame/message size split, origin validation, per-session rate limiting, global and per-IP connection caps, graceful shutdown, name sanitization, `room_closed` event, `api_version` field, mutex-poison recovery, env-parse warnings. |
 | v1.0 stable baseline | Done | Protocol, JS helper API, debug console, state sync contracts, and `.\scripts\verify.ps1` release gate are implemented. |
 | v1.1 SDK packaging | Done | `@playlink/client` extracted to `packages/js-sdk/` as a zero-dependency ESM package with TypeScript declarations and `node --test` unit suite. `examples/js-client` now consumes it via a `file:` link. |
+| v1.2 GUI launcher | Done | Native desktop launcher (`playlink-launcher`) with server/demo lifecycle management, log panel, and settings persistence. |
 | CI | Done | GitHub Actions workflow in `.github/workflows/ci.yml` runs Rust fmt/test, SDK tests, JS syntax checks, and end-to-end integration jobs. |
 
 ## Roadmap
@@ -433,7 +434,8 @@ npm run idle-timeout
 12. v1.0 stable room protocol + JS helper + debug console baseline ✓
 13. v1.1 `@playlink/client` SDK packaging ✓
 14. CI pipeline ✓
-15. Publish `@playlink/client` to the npm registry
+15. v1.2 GUI launcher ✓
+16. Publish `@playlink/client` to the npm registry
 16. More engine example integrations (Unity / C# / Rust client crate)
 17. Relay runtime prototype (after SDK pressure is real)
 
