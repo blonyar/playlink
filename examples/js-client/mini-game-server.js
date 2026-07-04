@@ -84,9 +84,9 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, '127.0.0.1', () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`Playlink examples:`);
-  console.log(`  Mini game:   http://127.0.0.1:${port}/`);
-  console.log(`  Tank Wars:   http://127.0.0.1:${port}/tanks`);
+  console.log(`  Mini game:   http://0.0.0.0:${port}/`);
+  console.log(`  Tank Wars:   http://0.0.0.0:${port}/tanks`);
   console.log(`Start the Playlink server separately with: rustup run stable cargo run`);
 });

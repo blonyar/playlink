@@ -71,7 +71,8 @@ try {
     Invoke-External "Rust tests" { rustup run stable cargo test }
 
     $jsFiles = @(
-        "examples/js-client/playlink-client.js",
+        "packages/js-sdk/src/index.js",
+        "packages/js-sdk/src/client.js",
         "examples/js-client/sdk-demo.js",
         "examples/js-client/mini-game.js",
         "examples/js-client/tanks.js",

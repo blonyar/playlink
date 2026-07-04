@@ -3,6 +3,12 @@ name = "playlink"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# Enables the `playlink-launcher` GUI binary. Off by default so the
+# server-only `cargo build` / `cargo test` gates (CI, verify.ps1) stay
+# free of eframe / winit / rfd / chrono and their native deps.
+launcher = ["dep:eframe", "dep:egui", "dep:webbrowser", "dep:rfd", "dep:chrono"]
+
 [dependencies]
 axum = { version = "0.7", features = ["ws"] }
 dashmap = "5"
@@ -15,6 +21,20 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 include_dir = "0.7"
+eframe = { version = "0.29", optional = true }
+egui = { version = "0.29", optional = true }
+webbrowser = { version = "1", optional = true }
+rfd = { version = "0.15", optional = true }
+chrono = { version = "0.4", optional = true }
 
 [dev-dependencies]
 tokio-tungstenite = "0.21"
+
+[[bin]]
+name = "playlink"
+path = "src/main.rs"
+
+[[bin]]
+name = "playlink-launcher"
+path = "src/bin/playlink-launcher.rs"
+required-features = ["launcher"]

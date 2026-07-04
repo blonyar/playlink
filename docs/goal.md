@@ -198,20 +198,9 @@ Rules:
 
 ## 5. Completed Milestones
 
-The current baseline already includes:
+See `docs/ROADMAP.md` for the full milestone history.
 
-- v0.1 dedicated WebSocket room server
-- v0.2 Web Debug Console
-- v0.3 protocol and room reliability
-- v0.4 host metadata and optional LAN discovery prototype
-- v0.5 JavaScript helper and example game workflow
-- v0.6 JavaScript helper stabilization and API docs
-- v0.7 relay groundwork design
-- v0.8 observability and room stats
-- v0.9 lightweight state sync prototype
-- hardening-pass (on-going): security, concurrency, and capacity hardening across transport, protocol, and lifecycle layers
-
-Historical planning docs remain useful as implementation records, but they should not override the current README, this goal document, or `docs/v1.0-baseline.md`.
+The current baseline already includes all milestones v0.1 through v1.1 (see `docs/v1.0-baseline.md`).
 
 ## 6. Completed Milestone: v1.0 Stable Baseline
 

@@ -50,6 +50,23 @@
       display: grid;
       grid-template-columns: 1fr 220px;
       gap: 16px;
+      min-height: 0;
+    }
+    aside {
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      position: sticky;
+      top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    aside::-webkit-scrollbar {
+      width: 4px;
+    }
+    aside::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 2px;
     }
     @media (max-width: 720px) {
       main { grid-template-columns: 1fr; }
@@ -61,6 +78,22 @@
       border: 1px solid #334155;
       border-radius: 8px;
       image-rendering: pixelated;
+      display: block;
+    }
+    #canvasWrap {
+      position: relative;
+    }
+    #debug {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      color: rgba(148, 163, 184, 0.6);
+      pointer-events: none;
+      text-shadow: 0 0 4px #000, 0 0 4px #000;
+      user-select: none;
     }
     aside {
       display: flex;
@@ -115,6 +148,27 @@
       line-height: 1.6;
       font-size: 13px;
     }
+    .room-entry {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e5e7eb;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .room-entry:hover:not(:disabled) {
+      background: #1e293b;
+    }
+    .room-entry:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
     kbd {
       display: inline-block;
       padding: 1px 6px;
@@ -126,8 +180,8 @@
     }
     pre {
       margin: 0;
-      min-height: 100px;
-      max-height: 220px;
+      min-height: 80px;
+      max-height: 180px;
       overflow: auto;
       padding: 8px;
       background: #020617;
@@ -151,7 +205,15 @@
   </header>
 
   <main>
-    <canvas id="arena" width="800" height="800"></canvas>
+    <div id="canvasWrap">
+      <canvas id="arena" width="800" height="800"></canvas>
+      <div id="debug">connecting...</div>
+      <div id="gameOverPanel" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(0,0,0,0.72);">
+        <div id="gameOverTitle" style="color:#fbbf24;font-size:38px;font-weight:bold;font-family:system-ui;"></div>
+        <div id="gameOverSubtitle" style="color:#e5e7eb;font-size:18px;font-family:system-ui;"></div>
+        <button id="restartBtn" class="secondary" style="margin-top:8px;padding:10px 24px;font-size:15px;">Play again</button>
+      </div>
+    </div>
     <aside>
       <div class="panel">
         <h2>Connection</h2>
@@ -180,21 +242,28 @@
       <div class="panel">
         <h2>Controls</h2>
         <ul class="help">
-          <li><kbd>W</kbd> / <kbd>↑</kbd> forward</li>
-          <li><kbd>S</kbd> / <kbd>↓</kbd> reverse</li>
-          <li><kbd>A</kbd> / <kbd>←</kbd> turn left</li>
-          <li><kbd>D</kbd> / <kbd>→</kbd> turn right</li>
-          <li><kbd>Space</kbd> fire</li>
+          <li><kbd>W</kbd> / <kbd>S</kbd> drive forward / back</li>
+          <li><kbd>A</kbd> / <kbd>D</kbd> strafe left / right</li>
+          <li>Mouse aim</li>
+          <li><kbd>Left click</kbd> / <kbd>Space</kbd> fire</li>
+          <li><kbd>Right click</kbd> / <kbd>E</kbd> use held item</li>
+          <li>Goal: 10 enemy kills, or wipe out the opponent</li>
         </ul>
       </div>
 
-      <div class="panel">
-        <h2>LAN deployment</h2>
-        <p class="help" style="margin:0;list-style:none;padding-left:0;">
-          The host runs <code style="color:#93c5fd;">cargo run</code> on one machine.
-          Other players on the same Wi-Fi set the WebSocket URL above to
-          <code style="color:#93c5fd;">ws://&lt;host-ip&gt;:7777/ws</code> and click Connect.
-        </p>
+      <div class="panel" id="roomPanel" style="display:none;">
+        <h2>Room</h2>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <code id="roomIdDisplay" style="flex:1;font-size:13px;word-break:break-all;"></code>
+          <button id="copyRoomBtn" class="secondary" style="flex-shrink:0;padding:4px 10px;font-size:12px;">Copy</button>
+        </div>
+      </div>
+
+      <div class="panel" id="roomsPanel">
+        <h2>Available Rooms</h2>
+        <div id="roomsList" style="font-size:13px;display:flex;flex-direction:column;gap:4px;">
+          <span style="color:#64748b;">fetching...</span>
+        </div>
       </div>
 
       <div class="panel">

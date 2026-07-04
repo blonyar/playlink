@@ -6,6 +6,8 @@ The project starts with a small, stable core: rooms, players, sessions, WebSocke
 
 ## Try It in 5 Minutes
 
+**Prerequisites:** [Rust](https://rustup.rs) (via rustup) and **Node.js 20+**.
+
 Terminal 1 — start the server:
 
 ```bash
@@ -24,16 +26,16 @@ Terminal 2 — run the SDK-style two-client demo:
 npm --prefix examples/js-client run sdk-demo
 ```
 
-Optional browser mini-game demo:
+Optional browser demos (requires server + terminal 2 running):
 
 ```bash
+# 4-player movement demo (mini-game)
 npm --prefix examples/js-client run mini-game
-```
+# → http://127.0.0.1:7780/
 
-Then open:
-
-```text
-http://127.0.0.1:7780/
+# 2-player tank battle (requires a second browser tab)
+npm --prefix examples/js-client run tanks
+# → http://127.0.0.1:7780/tanks
 ```
 
 For all runnable checks and demos, see `docs/demo-guide.md`.
@@ -89,6 +91,8 @@ Playlink v1.0 is complete. The JSON/WebSocket room protocol, JavaScript helper A
 - one-command verification via `.\scripts\verify.ps1` and GitHub Actions CI
 
 See `docs/v1.0-baseline.md` for the baseline protocol and helper contract. See `packages/js-sdk/README.md` for the published SDK surface.
+
+For the full milestone history, see `docs/ROADMAP.md`.
 
 For the long-term modular framework direction, work threads, milestone sequencing, and atomic commit policy, see `docs/goal.md`.
 
